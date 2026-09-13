@@ -38,6 +38,19 @@ export function getSheetHostAllowlist(): string[] {
 /** Maximum redirects followed when fetching the sheet; each hop is re-checked against the allowlist. */
 export const SHEET_MAX_REDIRECTS = 3;
 
+/**
+ * Hard cap on the sheet body we will read into memory.
+ * The response is stranger-controlled, so it is read as a bounded stream and aborted past this
+ * many bytes rather than trusted to end. The real sheet is a few hundred KB.
+ */
+export const SHEET_MAX_BYTES = 2 * 1024 * 1024;
+
+/**
+ * Content types the sheet fetch will parse. Anything else (an HTML sign-in or error page, say)
+ * is rejected instead of being fed to the CSV parser as if it were data.
+ */
+export const SHEET_ALLOWED_CONTENT_TYPES = ['text/csv', 'text/plain'] as const;
+
 /** Local data directory (~/.aiden-ai-profile-generator) */
 export function getAppDataDir() {
   return join(homedir(), `.${APP_ID}`);

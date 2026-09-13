@@ -6,7 +6,14 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parse } from 'csv-parse/sync';
-import { DEFAULT_SHEET_CSV_URL, getAppDataDir, SHEET_MAX_REDIRECTS } from '@/config';
+import {
+  DEFAULT_SHEET_CSV_URL,
+  getAppDataDir,
+  REQUEST_TIMEOUT_MS,
+  SHEET_ALLOWED_CONTENT_TYPES,
+  SHEET_MAX_BYTES,
+  SHEET_MAX_REDIRECTS
+} from '@/config';
 import { sanitizeProfile } from '@/sheet/sanitize';
 import { assertAllowedSheetUrl } from '@/sheet/url';
 
@@ -82,13 +89,14 @@ function parseProfiles(csv: string): SheetProfile[] {
  * Redirects are handled manually: the platform would otherwise follow a 302 to any host, which
  * would defeat the check on the initial URL.
  */
-async function fetchAllowedSheet(startUrl: string): Promise<{ res: Response; url: string }> {
+async function fetchAllowedSheet(startUrl: string, signal: AbortSignal): Promise<{ res: Response; url: string }> {
   let target = assertAllowedSheetUrl(startUrl).toString();
 
   for (let hop = 0; hop <= SHEET_MAX_REDIRECTS; hop++) {
     const res = await fetch(target, {
       headers: { Accept: 'text/csv,*/*' },
-      redirect: 'manual'
+      redirect: 'manual',
+      signal
     });
 
     const isRedirect = res.status >= 300 && res.status < 400;
@@ -104,6 +112,53 @@ async function fetchAllowedSheet(startUrl: string): Promise<{ res: Response; url
   throw new Error(`Sheet URL exceeded ${SHEET_MAX_REDIRECTS} redirects.`);
 }
 
+/** Reject a body that is not CSV-ish, so an HTML sign-in or error page never reaches the parser. */
+function assertParseableContentType(res: Response): void {
+  const mediaType = (res.headers.get('content-type') ?? '').split(';')[0]?.trim().toLowerCase() ?? '';
+  if (!SHEET_ALLOWED_CONTENT_TYPES.includes(mediaType as (typeof SHEET_ALLOWED_CONTENT_TYPES)[number])) {
+    throw new Error(
+      `Sheet response was '${mediaType || 'unknown'}', expected one of ${SHEET_ALLOWED_CONTENT_TYPES.join(', ')}.`
+    );
+  }
+}
+
+/**
+ * Read the body as text, aborting past `limitBytes`.
+ * A declared Content-Length is only a hint, so the running total is what enforces the cap: an
+ * endless or lying response stops at the limit instead of growing until the process dies.
+ */
+async function readCappedText(res: Response, limitBytes: number): Promise<string> {
+  const declared = Number(res.headers.get('content-length'));
+  if (Number.isFinite(declared) && declared > limitBytes) {
+    throw new Error(`Sheet CSV declared ${declared} bytes, over the ${limitBytes} byte limit.`);
+  }
+
+  if (!res.body) throw new Error('Sheet response had no body.');
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  const chunks: string[] = [];
+  let total = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      total += value.byteLength;
+      if (total > limitBytes) throw new Error(`Sheet CSV exceeded the ${limitBytes} byte limit.`);
+
+      chunks.push(decoder.decode(value, { stream: true }));
+    }
+  } finally {
+    // Cancel on the error path too, so an oversized body stops arriving instead of draining.
+    await reader.cancel().catch(() => {});
+  }
+
+  chunks.push(decoder.decode());
+  return chunks.join('');
+}
+
 /**
  * Manages fetching and caching community profiles from Google Sheets.
  * Cache TTL defaults to 6 hours.
@@ -111,11 +166,13 @@ async function fetchAllowedSheet(startUrl: string): Promise<{ res: Response; url
 export class SheetProfileStore {
   private csvUrl: string;
   private cacheTtlMs: number;
+  private timeoutMs: number;
   private cachePath = join(getAppDataDir(), 'sheetProfiles.json');
 
-  constructor(opts?: { csvUrl?: string; cacheTtlMs?: number }) {
+  constructor(opts?: { csvUrl?: string; cacheTtlMs?: number; timeoutMs?: number }) {
     this.csvUrl = opts?.csvUrl ?? process.env.AIDEN_AI_SHEET_CSV_URL ?? DEFAULT_SHEET_CSV_URL;
     this.cacheTtlMs = opts?.cacheTtlMs ?? 6 * 60 * 60 * 1000;
+    this.timeoutMs = opts?.timeoutMs ?? REQUEST_TIMEOUT_MS;
   }
 
   /** Ensure cache is fresh, fetch if stale */
@@ -128,13 +185,28 @@ export class SheetProfileStore {
 
   /** Fetch fresh data from the sheet and update cache */
   async sync({ csvUrl }: { csvUrl?: string }) {
-    const { res, url } = await fetchAllowedSheet(csvUrl ?? this.csvUrl);
+    // One deadline covers the redirect chain and the body read: a response that trickles forever
+    // would otherwise hang start(), which awaits ensureCached() before the transport connects.
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
 
-    if (!res.ok) {
-      throw new Error(`Failed to fetch sheet CSV (${res.status}).`);
+    let csv: string;
+    let url: string;
+    try {
+      const fetched = await fetchAllowedSheet(csvUrl ?? this.csvUrl, controller.signal);
+      url = fetched.url;
+
+      if (!fetched.res.ok) {
+        throw new Error(`Failed to fetch sheet CSV (${fetched.res.status}).`);
+      }
+
+      assertParseableContentType(fetched.res);
+      csv = await readCappedText(fetched.res, SHEET_MAX_BYTES);
+    } finally {
+      clearTimeout(timeout);
     }
 
-    const profiles = parseProfiles(await res.text());
+    const profiles = parseProfiles(csv);
     const cache: Cache = { cachedAtMs: Date.now(), csvUrl: url, profiles };
 
     await mkdir(getAppDataDir(), { recursive: true });
