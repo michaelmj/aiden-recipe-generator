@@ -2,42 +2,17 @@
  * Sanitizer for community sheet cells.
  *
  * Cells are written by strangers, so nothing that comes out of the CSV is trusted shape or size.
- * Every cell is stripped of ANSI escapes and control characters, length-capped, and — for brewing
- * fields — range-checked. A field that fails is dropped rather than passed through as junk; a row
+ * Every cell goes through the shared text neutralizer in @/text and — for brewing fields — a range
+ * check. A field that fails is dropped rather than passed through as junk; a row
  * that loses its title is dropped whole.
  */
 
 import * as z from 'zod/v4';
 import type { SheetProfile } from '@/sheet/store';
+import { sanitizeText, TITLE_MAX_CHARS } from '@/text';
 
-/** Longest free-text cell kept (title is tighter; see TITLE_MAX_CHARS). */
-export const TEXT_MAX_CHARS = 200;
-/** Longest recipe title kept. */
-export const TITLE_MAX_CHARS = 120;
-/** Longest cell read at all — anything past this is truncated before sanitizing. */
-const RAW_MAX_CHARS = 4_000;
 /** Most temperatures kept from a comma-separated pulse-temp list. */
 const MAX_PULSE_TEMPS = 20;
-
-// biome-ignore lint/suspicious/noControlCharactersInRegex: stripping control characters is the point
-const ANSI_ESCAPE = /\u001b\[[0-9;?]*[ -/]*[@-~]|\u001b[@-Z\\-_]/g;
-// biome-ignore lint/suspicious/noControlCharactersInRegex: stripping control characters is the point
-const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/g;
-/** Zero-width and bidi-override characters, which hide text from a human reading the output. */
-const INVISIBLE_CHARS = /[\u200b-\u200f\u2028\u2029\u202a-\u202e\u2060-\u2064\u206a-\u206f\ufeff]/g;
-
-/** Strip escapes and invisible characters, collapse whitespace, trim, and cap length. */
-export function sanitizeText(value: string, maxChars = TEXT_MAX_CHARS): string {
-  return value
-    .slice(0, RAW_MAX_CHARS)
-    .replace(ANSI_ESCAPE, '')
-    .replace(CONTROL_CHARS, ' ')
-    .replace(INVISIBLE_CHARS, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, maxChars)
-    .trim();
-}
 
 /** A bounded number written as a string; returns the canonical form or undefined if out of range. */
 function boundedNumber(value: string, min: number, max: number, integer = false): string | undefined {

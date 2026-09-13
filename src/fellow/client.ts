@@ -6,7 +6,8 @@
 
 import { FELLOW_API_BASE, REQUEST_TIMEOUT_MS } from '@/config';
 import { decodeJwtExpMs, type Session, SessionStore } from '@/fellow/session';
-import type { AidenCreateProfileInput, AidenUpdateProfileInput } from '@/schemas';
+import { AIDEN_LIMITS, type AidenCreateProfileInput, type AidenUpdateProfileInput } from '@/schemas';
+import { sanitizeText, TITLE_MAX_CHARS } from '@/text';
 
 /** Aiden device state (filtered from verbose API response) */
 export type Device = {
@@ -26,9 +27,10 @@ export type Device = {
 /** Brew profile stored on the device */
 export type Profile = {
   id: string;
+  /** Neutralized and length-capped: Drops titles are authored outside this account */
   title: string;
-  /** Custom = user-created, Fellow = defaults, Drops = from Fellow's library */
-  folder: 'Custom' | 'Fellow' | 'Drops';
+  /** Custom = user-created, Fellow = defaults, Drops = from Fellow's library, Unknown = unrecognized */
+  folder: 'Custom' | 'Fellow' | 'Drops' | 'Unknown';
   /** Water to coffee ratio (e.g., 16 = 1:16) */
   ratio: number;
   bloomEnabled: boolean;
@@ -48,11 +50,62 @@ export type Profile = {
   batchPulsesNumber: number;
   batchPulsesInterval: number | null;
   batchPulseTemperatures: number[];
+  /**
+   * What the device reported that this code would not vouch for — an out-of-range number, a
+   * mangled title, a folder label we do not know. Present only when something was off, so the
+   * model can see the anomaly instead of reading a doctored value as fact.
+   */
+  anomalies?: string[];
 };
 
-const num = (v: unknown, fallback: number) => (typeof v === 'number' ? v : fallback);
 const str = (v: unknown, fallback = '') => (typeof v === 'string' ? v : fallback);
-const numArray = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is number => typeof x === 'number') : []);
+
+/**
+ * Read a numeric profile field, recording anything outside what an Aiden can physically do.
+ * The number is still reported as the device sent it — this is the brewer's own state, and quietly
+ * clamping it would describe a profile that does not exist — but an out-of-range value is listed as
+ * an anomaly so the model does not read it as brewing advice. Drops profiles are authored outside
+ * the account, so the API is not a trusted source of bounded values. See docs/THREAT-MODEL.md.
+ */
+function boundedNum(
+  raw: unknown,
+  field: string,
+  range: { min: number; max: number },
+  fallback: number,
+  anomalies: string[]
+): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+    if (raw !== undefined && raw !== null) anomalies.push(`${field} was not a number; reporting ${fallback}`);
+    return fallback;
+  }
+  if (raw < range.min || raw > range.max) {
+    anomalies.push(`${field}=${raw} is outside the device range ${range.min}-${range.max}`);
+  }
+  return raw;
+}
+
+/** Read a pulse-temperature list, capped at one temperature per possible pulse. */
+function boundedTemperatures(raw: unknown, field: string, anomalies: string[]): number[] {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw)) {
+    anomalies.push(`${field} was not a list of temperatures`);
+    return [];
+  }
+
+  const numbers = raw.filter((x): x is number => typeof x === 'number' && Number.isFinite(x));
+  if (numbers.length !== raw.length) anomalies.push(`${field} had ${raw.length - numbers.length} non-numeric entries`);
+
+  const kept = numbers.slice(0, AIDEN_LIMITS.pulsesNumber.max);
+  if (kept.length < numbers.length) {
+    anomalies.push(`${field} listed ${numbers.length} temperatures; kept the first ${kept.length}`);
+  }
+
+  const { min, max } = AIDEN_LIMITS.temperature;
+  const strays = kept.filter((t) => t < min || t > max);
+  if (strays.length > 0) anomalies.push(`${field} has ${strays.length} temperatures outside ${min}-${max}`);
+
+  return kept;
+}
 
 function toDevice(raw: Record<string, unknown>): Device {
   return {
@@ -72,27 +125,48 @@ function toDevice(raw: Record<string, unknown>): Device {
 
 const VALID_FOLDERS: readonly Profile['folder'][] = ['Custom', 'Fellow', 'Drops'];
 
+/**
+ * Shape one profile from the API response.
+ * Every field is checked rather than coerced: these values reach aiden.listProfiles output, which
+ * the model reads, and a Drops title is not the user's own text.
+ */
 function toProfile(raw: Record<string, unknown>): Profile {
-  const folder = VALID_FOLDERS.includes(raw.folder as Profile['folder']) ? (raw.folder as Profile['folder']) : 'Custom';
+  const anomalies: string[] = [];
 
-  return {
+  // An unrecognized folder used to fall back to 'Custom', which is the one label that makes
+  // updateProfile and deleteProfile willing to write. Unknown fails closed instead.
+  const isKnownFolder = VALID_FOLDERS.includes(raw.folder as Profile['folder']);
+  if (!isKnownFolder) anomalies.push(`folder '${sanitizeText(str(raw.folder), 40)}' is not a folder this client knows`);
+  const folder = isKnownFolder ? (raw.folder as Profile['folder']) : 'Unknown';
+
+  const rawTitle = str(raw.title);
+  const title = sanitizeText(rawTitle, TITLE_MAX_CHARS);
+  if (title !== rawTitle) anomalies.push('title was shortened or stripped of unprintable characters');
+
+  const profile: Profile = {
     id: str(raw.id),
-    title: str(raw.title),
+    title,
     folder,
-    ratio: num(raw.ratio, 16),
+    ratio: boundedNum(raw.ratio, 'ratio', AIDEN_LIMITS.ratio, 16, anomalies),
     bloomEnabled: Boolean(raw.bloomEnabled),
-    bloomRatio: num(raw.bloomRatio, 2),
-    bloomDuration: num(raw.bloomDuration, 30),
-    bloomTemperature: num(raw.bloomTemperature, 96),
+    bloomRatio: boundedNum(raw.bloomRatio, 'bloomRatio', AIDEN_LIMITS.bloomRatio, 2, anomalies),
+    bloomDuration: boundedNum(raw.bloomDuration, 'bloomDuration', AIDEN_LIMITS.bloomDuration, 30, anomalies),
+    bloomTemperature: boundedNum(raw.bloomTemperature, 'bloomTemperature', AIDEN_LIMITS.temperature, 96, anomalies),
     ssPulsesEnabled: Boolean(raw.ssPulsesEnabled),
-    ssPulsesNumber: num(raw.ssPulsesNumber, 3),
-    ssPulsesInterval: num(raw.ssPulsesInterval, 23),
-    ssPulseTemperatures: numArray(raw.ssPulseTemperatures),
+    ssPulsesNumber: boundedNum(raw.ssPulsesNumber, 'ssPulsesNumber', AIDEN_LIMITS.pulsesNumber, 3, anomalies),
+    ssPulsesInterval: boundedNum(raw.ssPulsesInterval, 'ssPulsesInterval', AIDEN_LIMITS.pulsesInterval, 23, anomalies),
+    ssPulseTemperatures: boundedTemperatures(raw.ssPulseTemperatures, 'ssPulseTemperatures', anomalies),
     batchPulsesEnabled: Boolean(raw.batchPulsesEnabled),
-    batchPulsesNumber: num(raw.batchPulsesNumber, 1),
-    batchPulsesInterval: typeof raw.batchPulsesInterval === 'number' ? raw.batchPulsesInterval : null,
-    batchPulseTemperatures: numArray(raw.batchPulseTemperatures)
+    batchPulsesNumber: boundedNum(raw.batchPulsesNumber, 'batchPulsesNumber', AIDEN_LIMITS.pulsesNumber, 1, anomalies),
+    batchPulsesInterval:
+      raw.batchPulsesInterval === null || raw.batchPulsesInterval === undefined
+        ? null
+        : boundedNum(raw.batchPulsesInterval, 'batchPulsesInterval', AIDEN_LIMITS.pulsesInterval, 23, anomalies),
+    batchPulseTemperatures: boundedTemperatures(raw.batchPulseTemperatures, 'batchPulseTemperatures', anomalies)
   };
+
+  if (anomalies.length > 0) profile.anomalies = anomalies;
+  return profile;
 }
 
 /**

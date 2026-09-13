@@ -54,8 +54,16 @@ block. Response *bodies* are still foreign data; `toDevice` / `toProfile` (`src/
 already coerce every field to a known type with fallbacks, which is the right pattern. Error bodies
 are never quoted into a thrown message: a Fellow error can echo the bearer token or the submitted
 password, and every thrown message reaches the agent's context, so only the status code and a fixed
-hint travel (`upstreamError`). Residual exposure: `Drops` profile titles originate with Fellow, not
-the user.
+hint travel (`upstreamError`).
+
+`Drops` profile titles originate with Fellow, not the user, so the read path is bounded the same way
+the write path is: `toProfile` neutralizes the title through `sanitizeText` (`src/text.ts`), caps it,
+range-checks every number against `AIDEN_LIMITS`, truncates pulse-temperature lists to one entry per
+possible pulse, and lists whatever it would not vouch for in an `anomalies` array on the profile.
+Out-of-range numbers are reported as the device sent them — clamping would describe a profile that
+does not exist — but the anomaly note tells the model not to read them as brewing advice. An unrecognized
+`folder` becomes `Unknown` rather than falling back to `Custom`, which is the one label that makes
+`updateProfile` and `deleteProfile` willing to write.
 
 ### S4. Tool arguments from the model
 
@@ -103,7 +111,8 @@ the sink (`.9`) is the control that does not depend on the agent behaving.
 | CSV parser limits | `nh5.6` |
 | Cell validation and sanitization | `nh5.7` |
 | Untrusted-data framing in tool output | `nh5.8` |
-| Brewer parameter ranges | `nh5.9` |
+| Brewer parameter ranges (write path) | `nh5.9` |
+| Device response bounds and title neutralization (read path) | `6ic` |
 | Error-body and credential leakage | `nh5.10` |
 | API path segment injection | `nh5.15` |
 | Dependency tree and install policy | `nh5.11`, `nh5.12`, `nh5.13` |

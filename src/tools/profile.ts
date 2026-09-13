@@ -7,7 +7,7 @@ import { toolResponse } from '@/tools/response';
 const ProfileOutputSchema = z.object({
   id: z.string(),
   title: z.string(),
-  folder: z.enum(['Custom', 'Fellow', 'Drops']),
+  folder: z.enum(['Custom', 'Fellow', 'Drops', 'Unknown']),
   ratio: z.number(),
   bloomEnabled: z.boolean(),
   bloomRatio: z.number(),
@@ -20,7 +20,9 @@ const ProfileOutputSchema = z.object({
   batchPulsesEnabled: z.boolean(),
   batchPulsesNumber: z.number(),
   batchPulsesInterval: z.number().nullable(),
-  batchPulseTemperatures: z.array(z.number())
+  batchPulseTemperatures: z.array(z.number()),
+  // Present when the device reported something this client would not vouch for; see toProfile.
+  anomalies: z.array(z.string()).optional()
 });
 
 export function registerProfileTools(server: McpServer, fellow: FellowClient) {
@@ -28,7 +30,10 @@ export function registerProfileTools(server: McpServer, fellow: FellowClient) {
     'aiden.listProfiles',
     {
       title: 'List Brew Profiles',
-      description: 'List brew profiles for a device.',
+      description:
+        'List brew profiles for a device. A profile carrying an `anomalies` list reported values ' +
+        'outside what the brewer can do, or a title that had to be trimmed — read those fields as ' +
+        'suspect, not as brewing guidance.',
       inputSchema: { deviceId: ResourceIdSchema },
       outputSchema: { profiles: z.array(ProfileOutputSchema) }
     },
