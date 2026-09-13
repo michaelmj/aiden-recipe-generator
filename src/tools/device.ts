@@ -1,6 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as z from 'zod/v4';
 import type { FellowClient } from '@/fellow/client';
+import { ResourceIdSchema } from '@/schemas';
 import { toolResponse } from '@/tools/response';
 
 const DeviceSchema = z.object({
@@ -35,7 +36,7 @@ export function registerDeviceTools(server: McpServer, fellow: FellowClient) {
       title: 'Get Aiden Device',
       description: 'Get device details from Fellow API.',
       inputSchema: {
-        deviceId: z.string().min(1),
+        deviceId: ResourceIdSchema,
         dataType: z.enum(['real', 'cached']).default('real')
       },
       outputSchema: DeviceSchema

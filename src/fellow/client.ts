@@ -98,6 +98,13 @@ function toProfile(raw: Record<string, unknown>): Profile {
 }
 
 /**
+ * Encode a single URL path segment.
+ * Ids arrive as tool arguments, so a raw "..", "?" or "#" would otherwise reshape the
+ * authenticated request path. See docs/THREAT-MODEL.md.
+ */
+const seg = (value: string) => encodeURIComponent(value);
+
+/**
  * Client for the Fellow Aiden API.
  * Handles auth, device queries, and profile management.
  */
@@ -260,7 +267,7 @@ export class FellowClient {
 
   /** Get a specific device by ID */
   async getDevice(args: { deviceId: string; dataType?: 'real' | 'cached' }): Promise<Device> {
-    const raw = await this.request<Record<string, unknown>>('GET', `/devices/${args.deviceId}`, {
+    const raw = await this.request<Record<string, unknown>>('GET', `/devices/${seg(args.deviceId)}`, {
       query: { dataType: args.dataType ?? 'real' }
     });
     return toDevice(raw);
@@ -268,7 +275,7 @@ export class FellowClient {
 
   /** List all profiles on a device */
   async listProfiles(args: { deviceId: string }): Promise<Profile[]> {
-    const raw = await this.request<Record<string, unknown>[]>('GET', `/devices/${args.deviceId}/profiles`);
+    const raw = await this.request<Record<string, unknown>[]>('GET', `/devices/${seg(args.deviceId)}/profiles`);
     return raw.map(toProfile);
   }
 
@@ -284,14 +291,14 @@ export class FellowClient {
 
   /** Create a new profile on the device */
   async createProfile(args: { deviceId: string; profile: AidenCreateProfileInput }) {
-    return this.request<Record<string, unknown>>('POST', `/devices/${args.deviceId}/profiles`, { body: args.profile });
+    return this.request<Record<string, unknown>>('POST', `/devices/${seg(args.deviceId)}/profiles`, { body: args.profile });
   }
 
   /** Update an existing Custom profile (cannot modify Fellow/Drops profiles) */
   async updateProfile(args: { deviceId: string; profileId: string; patch: AidenUpdateProfileInput }) {
     const profile = await this.getProfile(args);
     if (profile.folder !== 'Custom') throw new Error(`Cannot modify ${profile.folder} profile "${args.profileId}".`);
-    return this.request<Record<string, unknown>>('PATCH', `/devices/${args.deviceId}/profiles/${args.profileId}`, {
+    return this.request<Record<string, unknown>>('PATCH', `/devices/${seg(args.deviceId)}/profiles/${seg(args.profileId)}`, {
       body: args.patch
     });
   }
@@ -300,7 +307,7 @@ export class FellowClient {
   async deleteProfile(args: { deviceId: string; profileId: string }) {
     const profile = await this.getProfile(args);
     if (profile.folder !== 'Custom') throw new Error(`Cannot delete ${profile.folder} profile "${args.profileId}".`);
-    await this.request<void>('DELETE', `/devices/${args.deviceId}/profiles/${args.profileId}`);
+    await this.request<void>('DELETE', `/devices/${seg(args.deviceId)}/profiles/${seg(args.profileId)}`);
     return { ok: true };
   }
 }

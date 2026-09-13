@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as z from 'zod/v4';
 import type { FellowClient } from '@/fellow/client';
-import { AidenCreateProfileSchema, AidenUpdateProfileSchema } from '@/schemas';
+import { AidenCreateProfileSchema, AidenUpdateProfileSchema, ResourceIdSchema } from '@/schemas';
 import { toolResponse } from '@/tools/response';
 
 const ProfileOutputSchema = z.object({
@@ -29,7 +29,7 @@ export function registerProfileTools(server: McpServer, fellow: FellowClient) {
     {
       title: 'List Brew Profiles',
       description: 'List brew profiles for a device.',
-      inputSchema: { deviceId: z.string().min(1) },
+      inputSchema: { deviceId: ResourceIdSchema },
       outputSchema: { profiles: z.array(ProfileOutputSchema) }
     },
     async ({ deviceId }) => toolResponse({ profiles: await fellow.listProfiles({ deviceId }) })
@@ -40,7 +40,7 @@ export function registerProfileTools(server: McpServer, fellow: FellowClient) {
     {
       title: 'Create Brew Profile',
       description: 'Create a new profile on the device.',
-      inputSchema: { deviceId: z.string().min(1), profile: AidenCreateProfileSchema },
+      inputSchema: { deviceId: ResourceIdSchema, profile: AidenCreateProfileSchema },
       outputSchema: { ok: z.boolean(), id: z.string().optional() }
     },
     async ({ deviceId, profile }) => {
@@ -55,8 +55,8 @@ export function registerProfileTools(server: McpServer, fellow: FellowClient) {
       title: 'Update Brew Profile',
       description: 'Patch an existing Custom profile. This should not be used for Drops/Fellow defaults.',
       inputSchema: {
-        deviceId: z.string().min(1),
-        profileId: z.string().min(1),
+        deviceId: ResourceIdSchema,
+        profileId: ResourceIdSchema,
         patch: AidenUpdateProfileSchema
       },
       outputSchema: { ok: z.boolean() }
@@ -72,7 +72,7 @@ export function registerProfileTools(server: McpServer, fellow: FellowClient) {
     {
       title: 'Delete Brew Profile',
       description: 'Delete an existing Custom profile.',
-      inputSchema: { deviceId: z.string().min(1), profileId: z.string().min(1) },
+      inputSchema: { deviceId: ResourceIdSchema, profileId: ResourceIdSchema },
       outputSchema: { ok: z.boolean() }
     },
     async ({ deviceId, profileId }) => {

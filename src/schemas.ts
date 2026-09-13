@@ -49,3 +49,15 @@ export const AidenUpdateProfileSchema = z.object({
 });
 
 export type AidenUpdateProfileInput = z.infer<typeof AidenUpdateProfileSchema>;
+
+/**
+ * Device and profile ids, as accepted from tool arguments.
+ * These are interpolated into Fellow API request paths, so the character set is kept to what a
+ * real id uses (uuid, serial, or opaque token) — no slashes, dots, query or fragment markers.
+ */
+export const ResourceIdSchema = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(/^[A-Za-z0-9._:-]+$/, 'Ids may contain only letters, digits, dot, underscore, colon, or hyphen.')
+  .refine((id) => !id.includes('..') && id !== '.', 'Ids may not contain dot segments.');
