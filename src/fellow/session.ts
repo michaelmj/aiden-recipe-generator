@@ -1,11 +1,16 @@
 /**
  * Session Store - handles secure storage of Fellow credentials.
- * Uses OS keychain (via keytar) when available, falls back to JSON file.
+ *
+ * The session blob is too large for the OS keychain helpers (see keychain.ts), so it is
+ * kept in a 0600 file encrypted with AES-256-GCM under a data key that lives in the OS
+ * keychain. Without the keychain the file holds plaintext and we say so loudly.
  */
 
+import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { APP_ID, getAppDataDir } from '@/config';
+import { type Keychain, getKeychain } from '@/fellow/keychain';
 
 /** Stored Fellow session data */
 export type Session = {
@@ -17,93 +22,138 @@ export type Session = {
 };
 
 const KEYCHAIN_SERVICE = APP_ID;
-const KEYCHAIN_ACCOUNT = 'fellow-session';
+/** Account holding the hex data key that encrypts the session file. */
+const KEYCHAIN_ACCOUNT = 'fellow-session-key';
 
-type KeytarModule = {
-  getPassword(service: string, account: string): Promise<string | null>;
-  setPassword(service: string, account: string, password: string): Promise<void>;
-  deletePassword(service: string, account: string): Promise<boolean>;
-};
-
-/** Cached keytar module to avoid repeated dynamic imports */
-let keytarCache: KeytarModule | null | undefined;
-
-/** Try to load keytar for secure keychain storage (cached) */
-async function getKeytar(): Promise<KeytarModule | null> {
-  if (keytarCache !== undefined) return keytarCache;
-  try {
-    const mod: { default?: KeytarModule } & Partial<KeytarModule> = await import('keytar');
-    keytarCache = (mod.default ?? mod) as KeytarModule;
-  } catch (err) {
-    console.error('keytar not available, falling back to file storage:', err instanceof Error ? err.message : err);
-    keytarCache = null;
-  }
-  return keytarCache;
+/** Encrypted session file (keychain available). */
+function encryptedSessionPath() {
+  return join(getAppDataDir(), 'session.enc.json');
 }
 
+/** Plaintext session file (no keychain helper, or a pre-encryption install). */
 function sessionPath() {
   return join(getAppDataDir(), 'session.json');
 }
 
+/** AES-256-GCM envelope written to disk. */
+type Envelope = { v: 1; iv: string; tag: string; ct: string };
+
+function isEnvelope(value: unknown): value is Envelope {
+  const e = value as Partial<Envelope> | null;
+  return !!e && e.v === 1 && typeof e.iv === 'string' && typeof e.tag === 'string' && typeof e.ct === 'string';
+}
+
+/** Read the data key from the keychain, creating one on first use. */
+async function loadOrCreateKey(keychain: Keychain): Promise<Buffer> {
+  const existing = await keychain.get(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT);
+  if (existing && /^[0-9a-f]{64}$/.test(existing)) return Buffer.from(existing, 'hex');
+
+  const key = randomBytes(32);
+  await keychain.set(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT, key.toString('hex'));
+  return key;
+}
+
+function seal(key: Buffer, plaintext: string): Envelope {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', key, iv);
+  const ct = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+  return { v: 1, iv: iv.toString('base64'), tag: cipher.getAuthTag().toString('base64'), ct: ct.toString('base64') };
+}
+
+/** Decrypt an envelope; throws if the key is wrong or the file was tampered with. */
+function unseal(key: Buffer, env: Envelope): string {
+  const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(env.iv, 'base64'));
+  decipher.setAuthTag(Buffer.from(env.tag, 'base64'));
+  return Buffer.concat([decipher.update(Buffer.from(env.ct, 'base64')), decipher.final()]).toString('utf8');
+}
+
+/** Read and JSON-parse a file, treating a missing file as null. */
+async function readJson(path: string): Promise<unknown | null> {
+  let raw: string;
+  try {
+    raw = await readFile(path, 'utf8');
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+      console.error(`Failed to read ${path}:`, (err as Error).message);
+    }
+    return null;
+  }
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    console.error(`Failed to parse ${path}: not valid JSON`);
+    return null;
+  }
+}
+
 /**
  * Stores Fellow session securely.
- * Prefers OS keychain (macOS Keychain, Windows Credential Manager) via keytar.
- * Falls back to JSON file if keytar unavailable (warning: credentials stored in plaintext).
+ * Prefers the OS keychain (macOS Keychain via security(1), Linux Secret Service via
+ * secret-tool(1)). Falls back to a 0600 JSON file when neither is available
+ * (warning: credentials are stored in plaintext there).
  */
 export class SessionStore {
   private warnedAboutPlaintext = false;
 
-  /** Read session from keychain or file */
+  /** Read the session, decrypting it when a keychain data key is available */
   async read(): Promise<Session | null> {
-    const keytar = await getKeytar();
-    if (keytar) {
-      const raw = await keytar.getPassword(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT);
-      if (!raw) return null;
-      try {
-        return JSON.parse(raw) as Session;
-      } catch (err) {
-        console.error('Failed to parse session from keychain:', err);
-        return null;
+    const keychain = await getKeychain();
+
+    if (keychain) {
+      const stored = await readJson(encryptedSessionPath());
+      if (isEnvelope(stored)) {
+        const key = await loadOrCreateKey(keychain);
+        try {
+          return JSON.parse(unseal(key, stored)) as Session;
+        } catch (err) {
+          console.error('Failed to decrypt session file; re-authentication required:', (err as Error).message);
+          return null;
+        }
       }
+      // Fall through: a pre-encryption install may still have a plaintext file to migrate.
     }
 
-    try {
-      const raw = await readFile(sessionPath(), 'utf8');
-      return JSON.parse(raw) as Session;
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
-        console.error('Failed to read session file:', err);
-      }
-      return null;
+    const plain = await readJson(sessionPath());
+    if (plain === null) return null;
+    const session = plain as Session;
+
+    if (keychain) {
+      // Migrate the legacy plaintext file to the encrypted one, then drop it.
+      await this.write(session);
+      await rm(sessionPath(), { force: true });
     }
+    return session;
   }
 
-  /** Write session to keychain or file */
+  /** Write the session, encrypted under the keychain data key when one is available */
   async write(session: Session): Promise<void> {
-    const keytar = await getKeytar();
-    if (keytar) {
-      await keytar.setPassword(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT, JSON.stringify(session));
+    const keychain = await getKeychain();
+    await mkdir(getAppDataDir(), { recursive: true });
+
+    if (keychain) {
+      const key = await loadOrCreateKey(keychain);
+      const envelope = seal(key, JSON.stringify(session));
+      await writeFile(encryptedSessionPath(), JSON.stringify(envelope), { mode: 0o600 });
       return;
     }
 
     // Warn once about plaintext storage
     if (!this.warnedAboutPlaintext) {
-      console.error('WARNING: Storing credentials in plaintext file. Install keytar for secure OS keychain storage.');
+      console.error(
+        `WARNING: no OS keychain helper found; storing credentials in plaintext at ${sessionPath()} (mode 0600). On Linux, install libsecret-tools for encrypted storage.`,
+      );
       this.warnedAboutPlaintext = true;
     }
 
-    await mkdir(getAppDataDir(), { recursive: true });
     await writeFile(sessionPath(), JSON.stringify(session, null, 2), { mode: 0o600 });
   }
 
-  /** Clear stored session */
+  /** Clear the stored session and its data key */
   async clear(): Promise<void> {
-    const keytar = await getKeytar();
-    if (keytar) {
-      await keytar.deletePassword(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT);
-      return;
-    }
+    const keychain = await getKeychain();
+    if (keychain) await keychain.delete(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT);
 
+    await rm(encryptedSessionPath(), { force: true });
     await rm(sessionPath(), { force: true });
   }
 }

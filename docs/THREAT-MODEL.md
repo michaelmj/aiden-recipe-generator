@@ -11,7 +11,7 @@ network is not**, and the community spreadsheet in particular is editable by str
 
 | Asset | Where | Why it matters |
 |---|---|---|
-| Fellow session (access + refresh JWT, email) | OS keychain via keytar, else `~/.aiden-ai-profile-generator/session.json` (`src/fellow/session.ts`) | Full control of the user's Fellow account |
+| Fellow session (access + refresh JWT, email) | AES-256-GCM in `~/.aiden-ai-profile-generator/session.enc.json`, key in the OS keychain; without a keychain helper, plaintext `session.json` mode 0600 (`src/fellow/session.ts`, `src/fellow/keychain.ts`) | Full control of the user's Fellow account |
 | The agent's context window | every tool response | Text placed here steers subsequent tool calls |
 | The physical brewer | `aiden.createProfile` / `aiden.updateProfile` | Heats water; parameters come from the agent |
 | Local brew history / settings | `~/.aiden-ai-profile-generator/*.json` (`src/storage/`) | Low value, but a persistence foothold |

@@ -10,7 +10,6 @@ Attribution is reproducible: `node scripts/dep-attribution.mjs /tmp/attrib.json`
 | Root | Transitive packages | Group |
 |---|---|---|
 | `@modelcontextprotocol/sdk` | 90 | prod |
-| `keytar` | 37 | optional |
 | `@biomejs/biome` | 9 | dev |
 | `@types/node` | 2 | dev |
 | `csv-parse` | 1 | prod |
@@ -26,7 +25,8 @@ Attribution is reproducible: `node scripts/dep-attribution.mjs /tmp/attrib.json`
 `src/index.ts` uses `StdioServerTransport` only, so none of that code is reached — but it is
 installed, it is what the advisories below live in, and it is on disk for anything else to load.
 
-`keytar` accounts for 37 packages, all of them install-time machinery.
+`keytar` accounted for 37 of those packages, all of them install-time machinery. It has since been
+removed — see *keytar: removed* below. The tree is now 107 packages from 3 direct dependencies.
 
 ## Advisories against pinned versions
 
@@ -109,3 +109,35 @@ with `bun test`; it stubs `fetch` and redirects `HOME` to a temp dir, so it make
 never touches the real `~/.aiden-ai-profile-generator` cache.
 
 Re-run the audit any time with `bun run audit` (exits non-zero at HIGH or above).
+
+## keytar: removed (2026-09-13, `nh5.12`)
+
+`keytar` is gone. `optionalDependencies` is empty and nothing in the tree runs code at install time.
+
+**Why.** It was archived upstream with no release since 2022-02-17, it pulled 37 of 137 packages,
+and its install ran `prebuild-install` to fetch a prebuilt native binary over the network — a second
+artifact entering the machine at install time, not pinned by the lockfile's integrity hashes.
+
+**What replaced it.** `src/fellow/keychain.ts` shells out to the credential CLI the OS already
+ships: `security(1)` on macOS, `secret-tool(1)` (libsecret) on Linux when present. The secret is
+written to the helper's **stdin**, never argv, so it is not exposed to `ps`. No native build, no
+postinstall, no new dependencies.
+
+**Why the session is encrypted rather than stored in the keychain directly.** `security`'s stdin
+password prompt reads into a **128-character buffer and silently drops the rest** — measured: a
+512-character secret stores as 129 bytes and exits 0. The Fellow session (two JWTs) is far larger,
+so storing it directly would corrupt it without any error. Instead `src/fellow/session.ts` keeps a
+32-byte data key in the keychain (64 hex chars, safely under the limit) and writes the session
+AES-256-GCM-encrypted to `session.enc.json` (mode 0600). `keychain.ts` rejects any secret over
+`MAX_SECRET_LENGTH` rather than letting a helper truncate it.
+
+**Net effect on the file fallback.** Previously a machine without keytar held the JWTs in plaintext
+on disk. Now that only happens where no keychain helper exists at all (Windows, headless Linux
+without libsecret), and the code warns once on write. Where a helper exists, an attacker with the
+file but not the keychain gets ciphertext — strictly better than before.
+
+**Migration.** A pre-existing plaintext `session.json` is read once, re-written encrypted, and
+deleted. No re-authentication needed.
+
+**Tests.** `test/keychain.test.ts`. The round-trip cases touch the real login keychain and can raise
+an OS access dialog, so they are opt-in: `AIDEN_TEST_KEYCHAIN=1 bun test`.
