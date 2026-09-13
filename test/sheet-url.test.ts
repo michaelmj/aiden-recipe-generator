@@ -41,7 +41,7 @@ describe('assertAllowedSheetUrl', () => {
 
 describe('redirect handling', () => {
   async function syncWith(responder: (url: string) => Response) {
-    process.env.HOME = mkdtempSync(join(tmpdir(), 'aiden-test-'));
+    process.env.AIDEN_AI_DATA_DIR = mkdtempSync(join(tmpdir(), 'aiden-test-'));
     const { SheetProfileStore } = await import('@/sheet/store');
     const realFetch = globalThis.fetch;
     globalThis.fetch = (async (input: string | URL) => responder(String(input))) as typeof fetch;
@@ -61,7 +61,7 @@ describe('redirect handling', () => {
   test('an off-allowlist operator URL is still refused', async () => {
     process.env.AIDEN_AI_SHEET_CSV_URL = 'https://evil.example/sheet.csv';
     try {
-      process.env.HOME = mkdtempSync(join(tmpdir(), 'aiden-test-'));
+      process.env.AIDEN_AI_DATA_DIR = mkdtempSync(join(tmpdir(), 'aiden-test-'));
       const { SheetProfileStore } = await import('@/sheet/store');
       await expect(new SheetProfileStore().sync({})).rejects.toThrow(/not an allowed sheet host/i);
     } finally {

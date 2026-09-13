@@ -14,7 +14,7 @@ type ToolHandler = (args: Record<string, unknown>) => Promise<{
  * callbacks can be invoked without a transport.
  */
 async function registerCapturingSheetTools(csv: string) {
-  process.env.HOME = mkdtempSync(join(tmpdir(), 'aiden-test-'));
+  process.env.AIDEN_AI_DATA_DIR = mkdtempSync(join(tmpdir(), 'aiden-test-'));
   const { SheetProfileStore } = await import('@/sheet/store');
   const { registerSheetTools } = await import('@/tools/sheet');
 

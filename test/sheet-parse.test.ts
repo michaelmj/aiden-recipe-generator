@@ -8,7 +8,7 @@ import { join } from 'node:path';
  * so no network call is made and the real user cache is never touched.
  */
 async function parseFixture(csv: string) {
-  process.env.HOME = mkdtempSync(join(tmpdir(), 'aiden-test-'));
+  process.env.AIDEN_AI_DATA_DIR = mkdtempSync(join(tmpdir(), 'aiden-test-'));
   const { SheetProfileStore } = await import('@/sheet/store');
 
   const realFetch = globalThis.fetch;

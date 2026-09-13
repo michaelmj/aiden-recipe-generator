@@ -12,7 +12,7 @@ async function syncWith(
   responder: (signal: AbortSignal) => Response,
   opts?: { timeoutMs?: number }
 ) {
-  process.env.HOME = mkdtempSync(join(tmpdir(), 'aiden-test-'));
+  process.env.AIDEN_AI_DATA_DIR = mkdtempSync(join(tmpdir(), 'aiden-test-'));
   const realFetch = globalThis.fetch;
   globalThis.fetch = (async (_input: string | URL, init?: RequestInit) =>
     responder(init?.signal as AbortSignal)) as typeof fetch;

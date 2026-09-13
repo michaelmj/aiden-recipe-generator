@@ -3,7 +3,7 @@
  */
 
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 export const APP_ID = 'aiden-ai-profile-generator';
 export const APP_VERSION = '0.1.0';
@@ -51,7 +51,12 @@ export const SHEET_MAX_BYTES = 2 * 1024 * 1024;
  */
 export const SHEET_ALLOWED_CONTENT_TYPES = ['text/csv', 'text/plain'] as const;
 
-/** Local data directory (~/.aiden-ai-profile-generator) */
+/**
+ * Local data directory (~/.aiden-ai-profile-generator).
+ * AIDEN_AI_DATA_DIR relocates it. Tests rely on this: os.homedir() ignores process.env.HOME under
+ * Bun, so overriding HOME is not enough to keep a test run out of the real user's cache.
+ */
 export function getAppDataDir() {
-  return join(homedir(), `.${APP_ID}`);
+  const override = process.env.AIDEN_AI_DATA_DIR?.trim();
+  return override ? resolve(override) : join(homedir(), `.${APP_ID}`);
 }
