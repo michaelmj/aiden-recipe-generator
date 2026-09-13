@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "aiden_recipe_generator",
+  "project_id": "e00edd3a-a0fb-4bcf-9be2-d583b7d4d277"
+}
