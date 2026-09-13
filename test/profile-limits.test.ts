@@ -81,7 +81,14 @@ describe('AidenCreateProfileSchema', () => {
 describe('AidenUpdateProfileSchema', () => {
   test('accepts a partial patch within range', () => {
     expect(AidenUpdateProfileSchema.safeParse({ bloomTemperature: 94 }).success).toBe(true);
-    expect(AidenUpdateProfileSchema.safeParse({}).success).toBe(true);
+  });
+
+  test('rejects a patch that changes nothing (aiden-recipe-generator-v8y)', () => {
+    // An empty patch would spend an authenticated write on the brewer and report success, so it is
+    // refused before the HTTP call. Clearing a nullable field is a real change and still passes.
+    expect(AidenUpdateProfileSchema.safeParse({}).success).toBe(false);
+    expect(AidenUpdateProfileSchema.safeParse({ title: undefined }).success).toBe(false);
+    expect(AidenUpdateProfileSchema.safeParse({ overallTemperature: null }).success).toBe(true);
   });
 
   test('applies the same bounds as create', () => {

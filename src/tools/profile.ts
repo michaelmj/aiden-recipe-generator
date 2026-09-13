@@ -53,7 +53,8 @@ export function registerProfileTools(server: McpServer, fellow: FellowClient) {
     'aiden.updateProfile',
     {
       title: 'Update Brew Profile',
-      description: 'Patch an existing Custom profile. This should not be used for Drops/Fellow defaults.',
+      description:
+        'Patch an existing Custom profile with at least one changed field. This should not be used for Drops/Fellow defaults.',
       inputSchema: {
         deviceId: ResourceIdSchema,
         profileId: ResourceIdSchema,

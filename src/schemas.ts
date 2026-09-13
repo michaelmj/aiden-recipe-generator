@@ -124,7 +124,7 @@ export const AidenCreateProfileSchema = z
 
 export type AidenCreateProfileInput = z.infer<typeof AidenCreateProfileSchema>;
 
-/** Schema for updating an existing profile (all fields optional) */
+/** Schema for updating an existing profile: every field optional, but at least one required */
 export const AidenUpdateProfileSchema = z
   .object({
     profileType: z.number().int().min(0).max(10).optional(),
@@ -146,6 +146,16 @@ export const AidenUpdateProfileSchema = z
     batchPulseTemperatures: PulseTemperaturesSchema.nullable().optional()
   })
   .superRefine((patch, ctx) => {
+    // Every field is optional, so {} parses. Letting it through spends an authenticated write on
+    // the brewer and answers ok:true, which tells a model its no-op patch worked. A null is a real
+    // change (it clears the field), so only absent values count as nothing to do.
+    if (Object.values(patch).every((value) => value === undefined)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'An update needs at least one field to change.'
+      });
+    }
+
     checkPulseTemperatureCount(ctx, 'ssPulseTemperatures', patch.ssPulseTemperatures, patch.ssPulsesNumber);
     checkPulseTemperatureCount(ctx, 'batchPulseTemperatures', patch.batchPulseTemperatures, patch.batchPulsesNumber);
   });
