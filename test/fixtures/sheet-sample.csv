@@ -1,0 +1,16 @@
+Recipe,Ethiopia Guji Light,Colombia Huila Med,"Brazil ""Fazenda"" Dark"
+Origin,Ethiopia,Colombia,Brazil
+Roast,Light,Medium,Dark
+Processing,Washed,Honey,Natural
+Varietal,Heirloom,Caturra,Yellow Bourbon
+Brew Ratio,16.5,15.5,14.5
+Bloom Ratio,2,2,1.5
+Bloom Time,45,35,25
+Bloom Temp,99,95,90
+Single No. of Pulses on,4,3,2
+Single Time btwn Pulses,23,25,30
+Single Pulse Temps,"99,98,97,96","95,94,93",'90,89'
+Batch No. of Pulses,2,1,1
+Batch Time btwn Pulses,30,30,
+Batch Pulse Temps,"98,97","94",93
+Notes (ignored),whatever,,
