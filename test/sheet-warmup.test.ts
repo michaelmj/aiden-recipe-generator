@@ -1,27 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdtempSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { SheetProfileStore } from '@/sheet/store';
+import { readFileSync } from 'node:fs';
+import { withFetch } from './helpers/offline';
+import { freshStore } from './helpers/sheet';
 
-const URL_OK = 'https://docs.google.com/spreadsheets/d/test/export?format=csv';
 const SAMPLE = readFileSync('test/fixtures/sheet-sample.csv', 'utf8');
-
-function freshStore(opts?: { timeoutMs?: number }) {
-  process.env.AIDEN_AI_DATA_DIR = mkdtempSync(join(tmpdir(), 'aiden-test-'));
-  return new SheetProfileStore({ csvUrl: URL_OK, ...opts });
-}
-
-/** Swap in a stub fetch for the duration of `body`. */
-async function withFetch<T>(stub: typeof fetch, body: () => Promise<T>): Promise<T> {
-  const realFetch = globalThis.fetch;
-  globalThis.fetch = stub;
-  try {
-    return await body();
-  } finally {
-    globalThis.fetch = realFetch;
-  }
-}
 
 describe('background sheet warm-up', () => {
   test('an unreachable sheet host does not reject the warm-up', async () => {

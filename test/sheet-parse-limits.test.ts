@@ -1,26 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdtempSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
 import { SHEET_MAX_COLUMNS, SHEET_MAX_RECORD_CHARS, SHEET_MAX_ROWS } from '@/config';
-import { SheetProfileStore } from '@/sheet/store';
-
-const URL_OK = 'https://docs.google.com/spreadsheets/d/test/export?format=csv';
-
-/** Feed a CSV through the store with fetch stubbed and the data dir redirected to a temp dir. */
-async function syncCsv(csv: string) {
-  process.env.AIDEN_AI_DATA_DIR = mkdtempSync(join(tmpdir(), 'aiden-test-'));
-  const realFetch = globalThis.fetch;
-  globalThis.fetch = (async () =>
-    new Response(csv, { status: 200, headers: { 'content-type': 'text/csv' } })) as unknown as typeof fetch;
-  try {
-    const store = new SheetProfileStore({ csvUrl: URL_OK });
-    await store.sync({});
-    return await store.getProfiles();
-  } finally {
-    globalThis.fetch = realFetch;
-  }
-}
+import { profilesFromCsv as syncCsv } from './helpers/sheet';
 
 describe('CSV shape limits', () => {
   test('the real sheet fixture still parses to the same profiles', async () => {

@@ -9,86 +9,41 @@
 
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SHEET_MAX_BYTES, SHEET_MAX_RECORD_CHARS } from '@/config';
 import { AidenCreateProfileSchema } from '@/schemas';
-import type { SheetProfile } from '@/sheet/store';
-import { SheetProfileStore } from '@/sheet/store';
-import { registerSheetTools } from '@/tools/sheet';
 import {
   BlockedNetworkCallError,
   blockedNetworkCalls,
   clearBlockedNetworkCalls,
   csvResponse,
-  freshDataDir,
   respondWith,
   withFetch
 } from './helpers/offline';
-
-const SHEET_URL = 'https://docs.google.com/spreadsheets/d/test/export?format=csv';
+import { callSheetTool, freshStore, profilesFromCsv as profilesFrom, SHEET_URL } from './helpers/sheet';
 
 const ESC = String.fromCharCode(27);
 const BEL = String.fromCharCode(7);
 const NUL = String.fromCharCode(0);
-const ZWSP = '​';
+const ZWSP = '\u200b';
 
 const fixture = (name: string) => readFileSync(`test/fixtures/${name}`, 'utf8');
 
-/** Sync a CSV body through the store and return the profiles it was willing to keep. */
-async function profilesFrom(csv: string, contentType = 'text/csv'): Promise<SheetProfile[]> {
-  freshDataDir();
-  return withFetch(
-    respondWith(() => csvResponse(csv, contentType)),
-    async () => {
-      const store = new SheetProfileStore({ csvUrl: SHEET_URL });
-      await store.sync({});
-      return store.getProfiles();
-    }
-  );
-}
-
-type ToolResult = { content: { type: 'text'; text: string }[]; structuredContent: Record<string, unknown> };
-type ToolHandler = (args: Record<string, unknown>) => Promise<ToolResult>;
-
 /** Run a CSV all the way out through the sheet.list tool, as an agent would see it. */
-async function sheetListText(csv: string): Promise<{ text: string; structured: Record<string, unknown> }> {
-  freshDataDir();
-  return withFetch(
-    respondWith(() => csvResponse(csv)),
-    async () => {
-      const store = new SheetProfileStore({ csvUrl: SHEET_URL });
-      await store.sync({});
-
-      const handlers = new Map<string, ToolHandler>();
-      const stub = {
-        registerTool(name: string, _config: unknown, handler: ToolHandler) {
-          handlers.set(name, handler);
-        }
-      };
-      registerSheetTools(stub as unknown as McpServer, store);
-
-      const res = await handlers.get('sheet.list')?.({});
-      if (!res) throw new Error('sheet.list was not registered');
-      return { text: res.content[0]?.text ?? '', structured: res.structuredContent };
-    }
-  );
-}
+const sheetListText = (csv: string) => callSheetTool(csv, 'sheet.list');
 
 describe('the suite itself never reaches the network', () => {
   test('an un-stubbed fetch is refused instead of hitting docs.google.com', async () => {
     clearBlockedNetworkCalls();
-    freshDataDir();
 
-    await expect(new SheetProfileStore({ csvUrl: SHEET_URL }).sync({})).rejects.toThrow(BlockedNetworkCallError);
+    await expect(freshStore().sync({})).rejects.toThrow(BlockedNetworkCallError);
     expect(blockedNetworkCalls()).toEqual([SHEET_URL]);
     clearBlockedNetworkCalls();
   });
 
   test('a warm-up with no stub swallows the block rather than falling back to the real host', async () => {
     clearBlockedNetworkCalls();
-    freshDataDir();
 
-    const store = new SheetProfileStore({ csvUrl: SHEET_URL });
+    const store = freshStore();
     await expect(store.warmCache()).resolves.toBeUndefined();
     expect(await store.getProfiles()).toEqual([]);
     clearBlockedNetworkCalls();
@@ -157,7 +112,6 @@ describe('CSV bombs (nh5.4, nh5.6)', () => {
   });
 
   test('an endlessly expanding body is aborted at the byte cap', async () => {
-    freshDataDir();
     const chunk = new Uint8Array(128 * 1024).fill(0x2c); // ','
     let served = 0;
     const endless = new ReadableStream<Uint8Array>({
@@ -170,9 +124,7 @@ describe('CSV bombs (nh5.4, nh5.6)', () => {
     await withFetch(
       respondWith(() => csvResponse(endless)),
       async () => {
-        await expect(new SheetProfileStore({ csvUrl: SHEET_URL }).sync({})).rejects.toThrow(
-          /exceeded the \d+ byte limit/i
-        );
+        await expect(freshStore().sync({})).rejects.toThrow(/exceeded the \d+ byte limit/i);
       }
     );
     expect(served).toBeLessThan(SHEET_MAX_BYTES * 2);
@@ -190,11 +142,10 @@ describe('an HTML page served as the sheet (nh5.4)', () => {
     // Content-type is attacker-controlled, so the type check alone is not enough: the parse has to
     // fail closed. No column survives sanitizing, and a parse with nothing left is reported as a
     // failure rather than written to the cache (aiden-recipe-generator-kdm).
-    freshDataDir();
     await withFetch(
       respondWith(() => csvResponse(fixture('sheet-html-error.csv'))),
       async () => {
-        const store = new SheetProfileStore({ csvUrl: SHEET_URL });
+        const store = freshStore();
         await expect(store.sync({})).rejects.toThrow(/no usable profiles/i);
         expect(await store.getProfiles()).toEqual([]);
       }
@@ -204,8 +155,7 @@ describe('an HTML page served as the sheet (nh5.4)', () => {
   test('a sign-in page cannot overwrite a good cache', async () => {
     // The realistic failure: the sheet was fetched fine this morning, and now the export endpoint
     // answers with a sign-in page. The cached recipes have to survive that.
-    freshDataDir();
-    const store = new SheetProfileStore({ csvUrl: SHEET_URL });
+    const store = freshStore();
 
     await withFetch(
       respondWith(() => csvResponse(fixture('sheet-sample.csv'))),
@@ -235,7 +185,6 @@ describe('redirects into the local network (nh5.2)', () => {
 
   for (const location of targets) {
     test(`a 302 to ${location} is refused, and the hop is never requested`, async () => {
-      freshDataDir();
       const requested: string[] = [];
 
       const stub = respondWith((url) => {
@@ -244,7 +193,7 @@ describe('redirects into the local network (nh5.2)', () => {
       });
 
       await withFetch(stub, async () => {
-        await expect(new SheetProfileStore({ csvUrl: SHEET_URL }).sync({})).rejects.toThrow(
+        await expect(freshStore().sync({})).rejects.toThrow(
           /not an allowed sheet host|must use https|not a valid URL/i
         );
       });

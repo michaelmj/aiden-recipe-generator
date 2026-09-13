@@ -1,42 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdtempSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-
-type ToolHandler = (args: Record<string, unknown>) => Promise<{
-  content: { type: 'text'; text: string }[];
-  structuredContent: Record<string, unknown>;
-}>;
-
-/**
- * Registers the sheet tools against a stub server that just captures each handler, so the tool
- * callbacks can be invoked without a transport.
- */
-async function registerCapturingSheetTools(csv: string) {
-  process.env.AIDEN_AI_DATA_DIR = mkdtempSync(join(tmpdir(), 'aiden-test-'));
-  const { SheetProfileStore } = await import('@/sheet/store');
-  const { registerSheetTools } = await import('@/tools/sheet');
-
-  const realFetch = globalThis.fetch;
-  globalThis.fetch = (async () =>
-    new Response(csv, { status: 200, headers: { 'content-type': 'text/csv' } })) as unknown as typeof fetch;
-  try {
-    const store = new SheetProfileStore({ csvUrl: 'https://docs.google.com/spreadsheets/d/test/export?format=csv' });
-    await store.sync({});
-
-    const tools = new Map<string, { description: string; handler: ToolHandler }>();
-    const stub = {
-      registerTool(name: string, config: { description: string }, handler: ToolHandler) {
-        tools.set(name, { description: config.description, handler });
-      }
-    };
-    registerSheetTools(stub as unknown as McpServer, store);
-    return tools;
-  } finally {
-    globalThis.fetch = realFetch;
-  }
-}
+import { readFileSync } from 'node:fs';
+import { sheetTools as registerCapturingSheetTools } from './helpers/sheet';
 
 const MALICIOUS_CSV = readFileSync('test/fixtures/sheet-injection.csv', 'utf8');
 

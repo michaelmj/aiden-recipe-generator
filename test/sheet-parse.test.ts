@@ -1,27 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdtempSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-
-/**
- * Parses the fixture through SheetProfileStore with fetch stubbed and HOME redirected,
- * so no network call is made and the real user cache is never touched.
- */
-async function parseFixture(csv: string) {
-  process.env.AIDEN_AI_DATA_DIR = mkdtempSync(join(tmpdir(), 'aiden-test-'));
-  const { SheetProfileStore } = await import('@/sheet/store');
-
-  const realFetch = globalThis.fetch;
-  globalThis.fetch = (async () =>
-    new Response(csv, { status: 200, headers: { 'content-type': 'text/csv' } })) as unknown as typeof fetch;
-  try {
-    const store = new SheetProfileStore({ csvUrl: 'https://docs.google.com/spreadsheets/d/test/export?format=csv' });
-    await store.sync({});
-    return await store.getProfiles();
-  } finally {
-    globalThis.fetch = realFetch;
-  }
-}
+import { readFileSync } from 'node:fs';
+import { profilesFromCsv as parseFixture } from './helpers/sheet';
 
 describe('community sheet parsing', () => {
   test('maps a column-oriented sheet into profiles', async () => {

@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { SheetProfileStore } from '@/sheet/store';
 import { assertAllowedSheetUrl, DisallowedSheetUrlError } from '@/sheet/url';
+import { freshDataDir, respondWith, withFetch } from './helpers/offline';
+import { freshStore } from './helpers/sheet';
 
 const GOOD = 'https://docs.google.com/spreadsheets/d/abc/export?format=csv&gid=0';
 
@@ -40,17 +40,8 @@ describe('assertAllowedSheetUrl', () => {
 });
 
 describe('redirect handling', () => {
-  async function syncWith(responder: (url: string) => Response) {
-    process.env.AIDEN_AI_DATA_DIR = mkdtempSync(join(tmpdir(), 'aiden-test-'));
-    const { SheetProfileStore } = await import('@/sheet/store');
-    const realFetch = globalThis.fetch;
-    globalThis.fetch = (async (input: string | URL) => responder(String(input))) as unknown as typeof fetch;
-    try {
-      return await new SheetProfileStore({ csvUrl: GOOD }).sync({});
-    } finally {
-      globalThis.fetch = realFetch;
-    }
-  }
+  const syncWith = (responder: (url: string) => Response) =>
+    withFetch(respondWith(responder), () => freshStore({ csvUrl: GOOD }).sync({}));
 
   test('refuses a redirect that leaves the allowlist', async () => {
     await expect(
@@ -61,8 +52,7 @@ describe('redirect handling', () => {
   test('an off-allowlist operator URL is still refused', async () => {
     process.env.AIDEN_AI_SHEET_CSV_URL = 'https://evil.example/sheet.csv';
     try {
-      process.env.AIDEN_AI_DATA_DIR = mkdtempSync(join(tmpdir(), 'aiden-test-'));
-      const { SheetProfileStore } = await import('@/sheet/store');
+      freshDataDir();
       await expect(new SheetProfileStore().sync({})).rejects.toThrow(/not an allowed sheet host/i);
     } finally {
       delete process.env.AIDEN_AI_SHEET_CSV_URL;

@@ -1,29 +1,14 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { SHEET_MAX_BYTES } from '@/config';
-import { SheetProfileStore } from '@/sheet/store';
-import type { ResponseBody } from './helpers/offline';
+import { csvResponse, respondWith, withFetch } from './helpers/offline';
+import { freshStore } from './helpers/sheet';
 
-const URL_OK = 'https://docs.google.com/spreadsheets/d/abc/export?format=csv&gid=0';
-
-/** Run sync() against a stubbed fetch, with a fresh HOME so nothing touches the real cache. */
-async function syncWith(responder: (signal: AbortSignal) => Response, opts?: { timeoutMs?: number }) {
-  process.env.AIDEN_AI_DATA_DIR = mkdtempSync(join(tmpdir(), 'aiden-test-'));
-  const realFetch = globalThis.fetch;
-  globalThis.fetch = (async (_input: string | URL, init?: RequestInit) =>
-    responder(init?.signal as AbortSignal)) as unknown as typeof fetch;
-  try {
-    return await new SheetProfileStore({ csvUrl: URL_OK, ...opts }).sync({});
-  } finally {
-    globalThis.fetch = realFetch;
-  }
-}
-
-function csvResponse(body: ResponseBody) {
-  return new Response(body, { status: 200, headers: { 'content-type': 'text/csv' } });
-}
+/** Run sync() against a stubbed fetch that answers from `responder`, which receives the signal. */
+const syncWith = (responder: (signal: AbortSignal) => Response, opts?: { timeoutMs?: number }) =>
+  withFetch(
+    respondWith((_url, init) => responder(init?.signal as AbortSignal)),
+    () => freshStore(opts).sync({})
+  );
 
 describe('sheet fetch bounds', () => {
   test('a body past the byte cap is aborted, not buffered', async () => {

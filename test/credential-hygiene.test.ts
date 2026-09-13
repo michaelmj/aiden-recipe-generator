@@ -4,11 +4,11 @@
  */
 
 import { afterEach, describe, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { FellowClient } from '@/fellow/client';
 import { type Session, SessionStore } from '@/fellow/session';
+import { freshDataDir, withFetch } from './helpers/offline';
 
 const SECRET_TOKEN = 'eyJhbGciOiJIUzI1NiJ9.SUPERSECRETTOKEN.sig';
 const SECRET_PASSWORD = 'hunter2-not-in-logs';
@@ -20,21 +20,7 @@ const SESSION: Session = {
   obtainedAtMs: Date.now()
 };
 
-function tempDataDir() {
-  process.env.AIDEN_AI_DATA_DIR = mkdtempSync(join(tmpdir(), 'aiden-test-'));
-  return process.env.AIDEN_AI_DATA_DIR;
-}
-
-/** Swap in a stub fetch for the duration of `body`. */
-async function withFetch<T>(stub: typeof fetch, body: () => Promise<T>): Promise<T> {
-  const realFetch = globalThis.fetch;
-  globalThis.fetch = stub;
-  try {
-    return await body();
-  } finally {
-    globalThis.fetch = realFetch;
-  }
-}
+const tempDataDir = freshDataDir;
 
 afterEach(() => {
   delete process.env.AIDEN_AI_DISABLE_KEYCHAIN;
