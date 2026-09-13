@@ -89,7 +89,14 @@ export async function searchBrews(query: string): Promise<BrewEntry[]> {
   const log = await readLog();
   const q = query.toLowerCase();
   return log.entries.filter((e) => {
-    const searchable = [e.coffee.name, e.coffee.roaster, e.coffee.origin, e.coffee.roast, e.coffee.processing, e.profile.title]
+    const searchable = [
+      e.coffee.name,
+      e.coffee.roaster,
+      e.coffee.origin,
+      e.coffee.roast,
+      e.coffee.processing,
+      e.profile.title
+    ]
       .filter(Boolean)
       .join(' ')
       .toLowerCase();

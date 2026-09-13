@@ -73,9 +73,7 @@ function toDevice(raw: Record<string, unknown>): Device {
 const VALID_FOLDERS: readonly Profile['folder'][] = ['Custom', 'Fellow', 'Drops'];
 
 function toProfile(raw: Record<string, unknown>): Profile {
-  const folder = VALID_FOLDERS.includes(raw.folder as Profile['folder'])
-    ? (raw.folder as Profile['folder'])
-    : 'Custom';
+  const folder = VALID_FOLDERS.includes(raw.folder as Profile['folder']) ? (raw.folder as Profile['folder']) : 'Custom';
 
   return {
     id: str(raw.id),
@@ -311,16 +309,22 @@ export class FellowClient {
 
   /** Create a new profile on the device */
   async createProfile(args: { deviceId: string; profile: AidenCreateProfileInput }) {
-    return this.request<Record<string, unknown>>('POST', `/devices/${seg(args.deviceId)}/profiles`, { body: args.profile });
+    return this.request<Record<string, unknown>>('POST', `/devices/${seg(args.deviceId)}/profiles`, {
+      body: args.profile
+    });
   }
 
   /** Update an existing Custom profile (cannot modify Fellow/Drops profiles) */
   async updateProfile(args: { deviceId: string; profileId: string; patch: AidenUpdateProfileInput }) {
     const profile = await this.getProfile(args);
     if (profile.folder !== 'Custom') throw new Error(`Cannot modify ${profile.folder} profile "${args.profileId}".`);
-    return this.request<Record<string, unknown>>('PATCH', `/devices/${seg(args.deviceId)}/profiles/${seg(args.profileId)}`, {
-      body: args.patch
-    });
+    return this.request<Record<string, unknown>>(
+      'PATCH',
+      `/devices/${seg(args.deviceId)}/profiles/${seg(args.profileId)}`,
+      {
+        body: args.patch
+      }
+    );
   }
 
   /** Delete a Custom profile (cannot delete Fellow/Drops profiles) */

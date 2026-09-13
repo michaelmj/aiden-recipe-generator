@@ -11,7 +11,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { APP_ID, getAppDataDir } from '@/config';
-import { type Keychain, getKeychain } from '@/fellow/keychain';
+import { getKeychain, type Keychain } from '@/fellow/keychain';
 
 /** Stored Fellow session data */
 export type Session = {

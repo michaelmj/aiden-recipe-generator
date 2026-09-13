@@ -47,7 +47,7 @@ function run(command: string, args: string[], input?: string): Promise<RunResult
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: HELPER_TIMEOUT_MS,
+      timeout: HELPER_TIMEOUT_MS
     });
 
     const out: Buffer[] = [];
@@ -83,7 +83,7 @@ function run(command: string, args: string[], input?: string): Promise<RunResult
       resolve({
         code: code ?? 1,
         stdout: Buffer.concat(out).toString('utf8'),
-        stderr: Buffer.concat(err).toString('utf8'),
+        stderr: Buffer.concat(err).toString('utf8')
       });
     });
 
@@ -111,7 +111,7 @@ function assertStorable(secret: string): void {
   }
   if (secret.length > MAX_SECRET_LENGTH) {
     throw new Error(
-      `Refusing to store a ${secret.length}-character secret: the OS keychain helper truncates at ${MAX_SECRET_LENGTH}`,
+      `Refusing to store a ${secret.length}-character secret: the OS keychain helper truncates at ${MAX_SECRET_LENGTH}`
     );
   }
 }
@@ -129,7 +129,11 @@ const macKeychain: Keychain = {
   async set(service, account, secret) {
     assertStorable(secret);
     // With -w and no value, security prompts for the password twice on stdin.
-    const { code } = await run('security', ['add-generic-password', '-s', service, '-a', account, '-U', '-w'], `${secret}\n${secret}\n`);
+    const { code } = await run(
+      'security',
+      ['add-generic-password', '-s', service, '-a', account, '-U', '-w'],
+      `${secret}\n${secret}\n`
+    );
     if (code !== 0) throw new Error(`security add-generic-password failed (exit ${code})`);
   },
 
@@ -138,7 +142,7 @@ const macKeychain: Keychain = {
     if (code === 44) return false;
     if (code !== 0) throw new Error(`security delete-generic-password failed (exit ${code})`);
     return true;
-  },
+  }
 };
 
 /** Linux Secret Service via secret-tool(1). Exit code 1 from lookup/clear means "no such item". */
@@ -155,7 +159,7 @@ const secretToolKeychain: Keychain = {
     const { code } = await run(
       'secret-tool',
       ['store', '--label', `${service} (${account})`, 'service', service, 'account', account],
-      secret,
+      secret
     );
     if (code !== 0) throw new Error(`secret-tool store failed (exit ${code})`);
   },
@@ -163,7 +167,7 @@ const secretToolKeychain: Keychain = {
   async delete(service, account) {
     const { code } = await run('secret-tool', ['clear', 'service', service, 'account', account]);
     return code === 0;
-  },
+  }
 };
 
 /** Cached backend: `null` once we know this platform has none. */
