@@ -249,6 +249,14 @@ export class SheetProfileStore {
     }
 
     const profiles = parseProfiles(csv);
+    // A sign-in or error page served as text/csv parses without throwing, but every column fails
+    // sanitizing, so the result is an empty list. Persisting that would replace a good cache with
+    // an empty one and take the recipe source dark until the next successful sync, so treat an
+    // empty parse as a failed sync: leave the cache alone and let the caller hear about it.
+    if (profiles.length === 0) {
+      throw new Error('Sheet CSV yielded no usable profiles; keeping the previous cache.');
+    }
+
     const cache: Cache = { cachedAtMs: Date.now(), csvUrl: url, profiles };
 
     await mkdir(getAppDataDir(), { recursive: true });

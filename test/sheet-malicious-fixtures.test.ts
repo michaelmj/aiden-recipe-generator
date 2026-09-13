@@ -175,15 +175,32 @@ describe('an HTML page served as the sheet (nh5.4)', () => {
     );
   });
 
-  test('a sign-in page lying about its type yields no profiles and leaks no markup', async () => {
+  test('a sign-in page lying about its type is a failed sync, not an empty sheet', async () => {
     // Content-type is attacker-controlled, so the type check alone is not enough: the parse has to
-    // fail closed. No column survives sanitizing, so the agent gets an empty list, not markup.
-    const profiles = await profilesFrom(fixture('sheet-html-error.csv'));
-    expect(profiles).toEqual([]);
+    // fail closed. No column survives sanitizing, and a parse with nothing left is reported as a
+    // failure rather than written to the cache (aiden-recipe-generator-kdm).
+    freshDataDir();
+    await withFetch(respondWith(() => csvResponse(fixture('sheet-html-error.csv'))), async () => {
+      const store = new SheetProfileStore({ csvUrl: SHEET_URL });
+      await expect(store.sync({})).rejects.toThrow(/no usable profiles/i);
+      expect(await store.getProfiles()).toEqual([]);
+    });
+  });
 
-    const { text, structured } = await sheetListText(fixture('sheet-html-error.csv'));
-    expect(text).not.toContain('<script>');
-    expect(structured.count).toBe(0);
+  test('a sign-in page cannot overwrite a good cache', async () => {
+    // The realistic failure: the sheet was fetched fine this morning, and now the export endpoint
+    // answers with a sign-in page. The cached recipes have to survive that.
+    freshDataDir();
+    const store = new SheetProfileStore({ csvUrl: SHEET_URL });
+
+    await withFetch(respondWith(() => csvResponse(fixture('sheet-sample.csv'))), () => store.sync({}));
+    const good = await store.getProfiles();
+    expect(good.length).toBeGreaterThan(0);
+
+    await withFetch(respondWith(() => csvResponse(fixture('sheet-html-error.csv'))), async () => {
+      await expect(store.sync({})).rejects.toThrow(/no usable profiles/i);
+    });
+    expect(await store.getProfiles()).toEqual(good);
   });
 });
 
