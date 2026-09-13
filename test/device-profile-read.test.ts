@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FellowClient } from '@/fellow/client';
 import { type Session, SessionStore } from '@/fellow/session';
+import { AidenCreateProfileSchema } from '@/schemas';
 import { TITLE_MAX_CHARS } from '@/text';
 import { respondWith, withFetch } from './helpers/offline';
 
@@ -21,6 +22,24 @@ const NUL = String.fromCharCode(0);
 /** The API answers JSON; request() ignores a body whose content-type does not say so. */
 const jsonResponse = (body: unknown) =>
   new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+
+/** A profile as aiden.createProfile would accept it, for the write-path case below. */
+const CREATABLE_PROFILE = AidenCreateProfileSchema.parse({
+  title: 'Morning Filter',
+  ratio: 16,
+  bloomEnabled: true,
+  bloomRatio: 2,
+  bloomDuration: 30,
+  bloomTemperature: 96,
+  ssPulsesEnabled: true,
+  ssPulsesNumber: 3,
+  ssPulsesInterval: 23,
+  ssPulseTemperatures: [96, 95, 94],
+  batchPulsesEnabled: false,
+  batchPulsesNumber: 1,
+  batchPulsesInterval: 30,
+  batchPulseTemperatures: []
+});
 
 /** A well-formed Custom profile; each test bends one field out of shape. */
 const SANE_PROFILE = {
@@ -42,17 +61,22 @@ const SANE_PROFILE = {
   batchPulseTemperatures: []
 };
 
-/** Log in a client against a temp data dir, then list profiles from a stubbed API response. */
-async function listProfiles(profiles: unknown[]) {
+/** A logged-in client against a fresh temp data dir. */
+async function loggedInClient(): Promise<FellowClient> {
   process.env.AIDEN_AI_DATA_DIR = mkdtempSync(join(tmpdir(), 'aiden-test-'));
   process.env.AIDEN_AI_ALLOW_PLAINTEXT_SESSION = '1';
 
   const session: Session = { email: 'someone@example.com', accessToken: 'token', obtainedAtMs: Date.now() };
   await new SessionStore().write(session);
+  return new FellowClient();
+}
 
+/** Log in a client against a temp data dir, then list profiles from a stubbed API response. */
+async function listProfiles(profiles: unknown[]) {
+  const client = await loggedInClient();
   return withFetch(
     respondWith(() => jsonResponse(profiles)),
-    () => new FellowClient().listProfiles({ deviceId: 'dev1' })
+    () => client.listProfiles({ deviceId: 'dev1' })
   );
 }
 
@@ -160,5 +184,58 @@ describe('folder labels from the device', () => {
     });
 
     expect(seen.filter((call) => call.startsWith('PATCH') || call.startsWith('DELETE'))).toEqual([]);
+  });
+});
+
+describe('responses that are not the JSON we asked for (aiden-recipe-generator-jwv)', () => {
+  test('a 200 that is not JSON names the request instead of crashing on .map', async () => {
+    // A proxy or captive portal answering with HTML used to parse as undefined, which listProfiles
+    // then dereferenced — the user saw a TypeError about .map, not what actually happened.
+    const client = await loggedInClient();
+
+    await withFetch(
+      respondWith(
+        () => new Response('<html>sign in</html>', { status: 200, headers: { 'content-type': 'text/html' } })
+      ),
+      async () => {
+        await expect(client.listProfiles({ deviceId: 'dev1' })).rejects.toThrow(
+          /GET \/devices\/dev1\/profiles answered 'text\/html', expected JSON/
+        );
+      }
+    );
+  });
+
+  test('a JSON object where a list belongs is refused', async () => {
+    const client = await loggedInClient();
+
+    await withFetch(
+      respondWith(() => jsonResponse({ profiles: [] })),
+      async () => {
+        await expect(client.listProfiles({ deviceId: 'dev1' })).rejects.toThrow(/expected a list/i);
+      }
+    );
+  });
+
+  test('a body that is not valid JSON is refused', async () => {
+    const client = await loggedInClient();
+
+    await withFetch(
+      respondWith(() => new Response('{not json', { status: 200, headers: { 'content-type': 'application/json' } })),
+      async () => {
+        await expect(client.listProfiles({ deviceId: 'dev1' })).rejects.toThrow(/not valid JSON/i);
+      }
+    );
+  });
+
+  test('a write that answers 204 with no body still succeeds', async () => {
+    // A successful POST or PATCH need not return the profile; only reads require a body.
+    const client = await loggedInClient();
+
+    await withFetch(
+      respondWith(() => new Response(null, { status: 204 })),
+      async () => {
+        expect(await client.createProfile({ deviceId: 'dev1', profile: CREATABLE_PROFILE })).toBeUndefined();
+      }
+    );
   });
 });

@@ -311,11 +311,11 @@ export class FellowClient {
     }
   }
 
-  private async request<T>(
+  private async send(
     method: string,
     path: string,
     opts?: { query?: Record<string, unknown>; body?: unknown }
-  ): Promise<T> {
+  ): Promise<Response> {
     const url = new URL(`${FELLOW_API_BASE}${path}`);
     if (opts?.query) {
       for (const [k, v] of Object.entries(opts.query)) {
@@ -340,18 +340,77 @@ export class FellowClient {
         signal: controller.signal
       });
       if (!res.ok) throw upstreamError(`${method} ${path}`, res.status);
-
-      return res.headers.get('content-type')?.includes('application/json')
-        ? ((await res.json()) as T)
-        : (undefined as T);
+      return res;
     } finally {
       clearTimeout(timeout);
     }
   }
 
+  /**
+   * Call the API and parse a JSON body.
+   * A 200 that is not JSON — a proxy's HTML, a captive portal, a body with no content-type — used to
+   * come back as `undefined`, which the list callers then dereferenced; the failure surfaced as a
+   * TypeError about `.map` instead of saying what went wrong.
+   */
+  private async requestJson<T>(
+    method: string,
+    path: string,
+    opts?: { query?: Record<string, unknown>; body?: unknown }
+  ): Promise<T> {
+    const res = await this.send(method, path, opts);
+    const mediaType = (res.headers.get('content-type') ?? '').split(';')[0]?.trim().toLowerCase() ?? '';
+    // The body is not quoted, for the same reason upstreamError does not quote one.
+    if (!mediaType.includes('json')) {
+      throw new Error(`${method} ${path} answered '${mediaType || 'no content-type'}', expected JSON.`);
+    }
+    try {
+      return (await res.json()) as T;
+    } catch {
+      throw new Error(`${method} ${path} answered with a body that is not valid JSON.`);
+    }
+  }
+
+  /** Call the API and discard the body, for endpoints that answer with no content. */
+  private async requestVoid(
+    method: string,
+    path: string,
+    opts?: { query?: Record<string, unknown>; body?: unknown }
+  ): Promise<void> {
+    await this.send(method, path, opts);
+  }
+
+  /**
+   * Like requestJson, but for writes: a successful POST or PATCH may answer 204, or 200 with no
+   * body, and that is not a failure. Returns undefined when there is no JSON to read.
+   */
+  private async requestOptionalJson<T>(
+    method: string,
+    path: string,
+    opts?: { query?: Record<string, unknown>; body?: unknown }
+  ): Promise<T | undefined> {
+    const res = await this.send(method, path, opts);
+    if (!(res.headers.get('content-type') ?? '').toLowerCase().includes('json')) return undefined;
+    try {
+      return (await res.json()) as T;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** A JSON list endpoint; an object or a bare value where a list belongs is an upstream change. */
+  private async requestJsonArray(
+    method: string,
+    path: string,
+    opts?: { query?: Record<string, unknown>; body?: unknown }
+  ): Promise<Record<string, unknown>[]> {
+    const parsed = await this.requestJson<unknown>(method, path, opts);
+    if (!Array.isArray(parsed)) throw new Error(`${method} ${path} answered with a single value, expected a list.`);
+    return parsed as Record<string, unknown>[];
+  }
+
   /** List all Aiden devices on the account */
   async listDevices(opts: { dataType?: 'real' | 'cached' } = {}): Promise<Device[]> {
-    const raw = await this.request<Record<string, unknown>[]>('GET', '/devices', {
+    const raw = await this.requestJsonArray('GET', '/devices', {
       query: { dataType: opts.dataType ?? 'real' }
     });
     return raw.map(toDevice);
@@ -359,7 +418,7 @@ export class FellowClient {
 
   /** Get a specific device by ID */
   async getDevice(args: { deviceId: string; dataType?: 'real' | 'cached' }): Promise<Device> {
-    const raw = await this.request<Record<string, unknown>>('GET', `/devices/${seg(args.deviceId)}`, {
+    const raw = await this.requestJson<Record<string, unknown>>('GET', `/devices/${seg(args.deviceId)}`, {
       query: { dataType: args.dataType ?? 'real' }
     });
     return toDevice(raw);
@@ -367,7 +426,7 @@ export class FellowClient {
 
   /** List all profiles on a device */
   async listProfiles(args: { deviceId: string }): Promise<Profile[]> {
-    const raw = await this.request<Record<string, unknown>[]>('GET', `/devices/${seg(args.deviceId)}/profiles`);
+    const raw = await this.requestJsonArray('GET', `/devices/${seg(args.deviceId)}/profiles`);
     return raw.map(toProfile);
   }
 
@@ -383,7 +442,7 @@ export class FellowClient {
 
   /** Create a new profile on the device */
   async createProfile(args: { deviceId: string; profile: AidenCreateProfileInput }) {
-    return this.request<Record<string, unknown>>('POST', `/devices/${seg(args.deviceId)}/profiles`, {
+    return this.requestOptionalJson<Record<string, unknown>>('POST', `/devices/${seg(args.deviceId)}/profiles`, {
       body: args.profile
     });
   }
@@ -392,7 +451,7 @@ export class FellowClient {
   async updateProfile(args: { deviceId: string; profileId: string; patch: AidenUpdateProfileInput }) {
     const profile = await this.getProfile(args);
     if (profile.folder !== 'Custom') throw new Error(`Cannot modify ${profile.folder} profile "${args.profileId}".`);
-    return this.request<Record<string, unknown>>(
+    return this.requestOptionalJson<Record<string, unknown>>(
       'PATCH',
       `/devices/${seg(args.deviceId)}/profiles/${seg(args.profileId)}`,
       {
@@ -405,7 +464,7 @@ export class FellowClient {
   async deleteProfile(args: { deviceId: string; profileId: string }) {
     const profile = await this.getProfile(args);
     if (profile.folder !== 'Custom') throw new Error(`Cannot delete ${profile.folder} profile "${args.profileId}".`);
-    await this.request<void>('DELETE', `/devices/${seg(args.deviceId)}/profiles/${seg(args.profileId)}`);
+    await this.requestVoid('DELETE', `/devices/${seg(args.deviceId)}/profiles/${seg(args.profileId)}`);
     return { ok: true };
   }
 }
