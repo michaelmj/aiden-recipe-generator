@@ -70,6 +70,13 @@ does not exist — but the anomaly note tells the model not to read them as brew
 Not a source of malice on their own, but they are the relay by which S1 text becomes action —
 including id strings interpolated into request paths (`src/fellow/client.ts:217`).
 
+The write schemas are strict objects, so a profile payload may carry only fields this server means
+to send. Two fields are deliberately not writable: `duration`, which the reference client lists in
+`SERVER_SIDE_PROFILE_FIELDS` and strips before POST and PATCH (Fellow computes it), and
+`profileType`, which is pinned to 0 — the only value any reference usage sends, with nothing
+documenting what another would mean. Both were previously bounded by guesses (`profileType` 0–10,
+`duration` 0–3600) rather than by anything observed.
+
 ## Sinks — where untrusted data lands
 
 | Sink | Path | Exposure |
@@ -113,6 +120,7 @@ the sink (`.9`) is the control that does not depend on the agent behaving.
 | Untrusted-data framing in tool output | `nh5.8` |
 | Brewer parameter ranges (write path) | `nh5.9` |
 | Device response bounds and title neutralization (read path) | `6ic` |
+| Unverified write bounds (`profileType`, `duration`) | `iaf` |
 | Error-body and credential leakage | `nh5.10` |
 | API path segment injection | `nh5.15` |
 | Dependency tree and install policy | `nh5.11`, `nh5.12`, `nh5.13` |

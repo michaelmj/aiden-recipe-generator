@@ -24,6 +24,22 @@ describe('AidenCreateProfileSchema', () => {
     expect(AidenCreateProfileSchema.safeParse(realProfile).success).toBe(true);
   });
 
+  test('writes only the observed profileType (aiden-recipe-generator-iaf)', () => {
+    // Every reference usage of the field sends 0 and nothing documents another value, so 0 is the
+    // only type this server will put on a brewer. It is also the default.
+    expect(AidenCreateProfileSchema.safeParse(realProfile).data?.profileType).toBe(0);
+    expect(AidenCreateProfileSchema.safeParse({ ...realProfile, profileType: 0 }).success).toBe(true);
+    for (const profileType of [1, 2, 10, -1, 0.5]) {
+      expect(AidenCreateProfileSchema.safeParse({ ...realProfile, profileType }).success).toBe(false);
+    }
+  });
+
+  test('refuses server-derived fields (aiden-recipe-generator-iaf)', () => {
+    for (const extra of [{ duration: 240 }, { id: 'p1' }, { folder: 'Custom' }, { lastUsedTime: 1 }]) {
+      expect(AidenCreateProfileSchema.safeParse({ ...realProfile, ...extra }).success).toBe(false);
+    }
+  });
+
   test('rejects temperatures outside the brewer range', () => {
     for (const bloomTemperature of [0, 49.5, 99.5, 212, 1000, -5]) {
       expect(AidenCreateProfileSchema.safeParse({ ...realProfile, bloomTemperature }).success).toBe(false);
@@ -97,8 +113,22 @@ describe('AidenUpdateProfileSchema', () => {
       { overallTemperature: 120 },
       { ratio: 40 },
       { ssPulsesInterval: 600 },
-      { duration: 100_000 },
       { batchPulseTemperatures: Array.from({ length: 50 }, () => 96) }
+    ]) {
+      expect(AidenUpdateProfileSchema.safeParse(patch).success).toBe(false);
+    }
+  });
+
+  test('refuses server-derived and fixed fields (aiden-recipe-generator-iaf)', () => {
+    // The reference client strips these before it PATCHes; this server rejects them instead, so a
+    // model that tries to set a Fellow-computed field hears about it rather than having it dropped.
+    for (const patch of [
+      { duration: 240 },
+      { profileType: 0 },
+      { id: 'p1' },
+      { folder: 'Custom' },
+      { instantBrew: true },
+      { isDefaultProfile: true }
     ]) {
       expect(AidenUpdateProfileSchema.safeParse(patch).success).toBe(false);
     }

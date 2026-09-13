@@ -6,10 +6,14 @@
 import * as z from 'zod/v4';
 
 /**
- * Physical limits the Aiden firmware accepts, mirrored from the reverse-engineered
- * `fellow-aiden` profile model (https://github.com/9b/fellow-aiden).
+ * Physical limits the Aiden firmware accepts, mirrored from the enums in the reverse-engineered
+ * `fellow-aiden` profile model (`fellow_aiden/profile.py`, https://github.com/9b/fellow-aiden).
  * Profile values can originate from the community sheet or from a model that made a number up,
  * so they are bounded here — before any HTTP call reaches the brewer. See docs/THREAT-MODEL.md.
+ *
+ * `duration` is deliberately absent: the same reference client lists it in
+ * SERVER_SIDE_PROFILE_FIELDS and strips it from the payload before POST and PATCH, so it is
+ * computed by Fellow and is not ours to write (aiden-recipe-generator-iaf).
  */
 export const AIDEN_LIMITS = {
   /** Water:coffee ratio, in 0.5 steps */
@@ -24,8 +28,6 @@ export const AIDEN_LIMITS = {
   pulsesNumber: { min: 1, max: 10 },
   /** Seconds between pulses */
   pulsesInterval: { min: 5, max: 60 },
-  /** Total brew duration in seconds, as reported back by the device */
-  duration: { min: 0, max: 3600 },
   title: { max: 50 }
 } as const;
 
@@ -94,8 +96,14 @@ function checkPulseTemperatureCount(
 
 /** Schema for creating a new brew profile */
 export const AidenCreateProfileSchema = z
-  .object({
-    profileType: z.number().int().min(0).max(10).default(0),
+  .strictObject({
+    /**
+     * The reference client's model declares `profileType: int` with no validator, and every usage
+     * of it there — the README example, brew_studio, brew_assistant — sends 0. Nothing documents
+     * what another value means, so 0 is the only value this server will write to a brewer
+     * (aiden-recipe-generator-iaf).
+     */
+    profileType: z.literal(0).default(0),
     title: TitleSchema,
     overallTemperature: TemperatureSchema.optional().nullable(),
     ratio: RatioSchema,
@@ -126,11 +134,12 @@ export type AidenCreateProfileInput = z.infer<typeof AidenCreateProfileSchema>;
 
 /** Schema for updating an existing profile: every field optional, but at least one required */
 export const AidenUpdateProfileSchema = z
-  .object({
-    profileType: z.number().int().min(0).max(10).optional(),
+  .strictObject({
+    // profileType and duration are absent on purpose: the first is fixed at creation (see the
+    // create schema) and the second is server-derived. A patch naming either is rejected rather
+    // than silently stripped, so a model sending one hears about it.
     title: TitleSchema.optional(),
     ratio: RatioSchema.optional(),
-    duration: z.number().int().min(AIDEN_LIMITS.duration.min).max(AIDEN_LIMITS.duration.max).optional(),
     bloomEnabled: z.boolean().optional(),
     overallTemperature: TemperatureSchema.optional().nullable(),
     bloomRatio: BloomRatioSchema.optional(),
