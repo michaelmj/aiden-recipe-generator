@@ -29,19 +29,24 @@ registerSheetTools(server, sheetStore);
 registerStorageTools(server);
 registerPrompts(server);
 
-/** Initialize the server: warm sheet cache if possible, connect transport. */
+/** Initialize the server: connect transport, then warm the sheet cache in the background. */
 async function start() {
-  try {
-    await sheetStore.ensureCached();
-    const profiles = await sheetStore.getProfiles();
-    console.error(`Loaded ${profiles.length} community profiles`);
-  } catch (err) {
-    console.error('Failed to load community sheet (continuing without it):', err instanceof Error ? err.message : err);
-  }
-
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error(`${APP_ID} running (stdio)`);
+
+  // Warm-up runs after the transport is live and is never awaited here: the community sheet is a
+  // remote third party, and an unreachable or stalling host must not delay or break startup.
+  // warmCache() swallows its own failures; sheet tools fall back to whatever is cached.
+  void sheetStore
+    .warmCache()
+    .then(() => sheetStore.getProfiles())
+    .then((profiles) => {
+      console.error(`Loaded ${profiles.length} community profiles`);
+    })
+    .catch((err) => {
+      console.error('Community sheet warm-up failed:', err instanceof Error ? err.message : err);
+    });
 }
 
 // Graceful shutdown

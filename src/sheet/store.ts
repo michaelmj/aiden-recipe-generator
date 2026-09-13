@@ -168,11 +168,34 @@ export class SheetProfileStore {
   private cacheTtlMs: number;
   private timeoutMs: number;
   private cachePath = join(getAppDataDir(), 'sheetProfiles.json');
+  private warmup: Promise<void> | null = null;
 
   constructor(opts?: { csvUrl?: string; cacheTtlMs?: number; timeoutMs?: number }) {
     this.csvUrl = opts?.csvUrl ?? process.env.AIDEN_AI_SHEET_CSV_URL ?? DEFAULT_SHEET_CSV_URL;
     this.cacheTtlMs = opts?.cacheTtlMs ?? 6 * 60 * 60 * 1000;
     this.timeoutMs = opts?.timeoutMs ?? REQUEST_TIMEOUT_MS;
+  }
+
+  /**
+   * Start a best-effort cache warm without making the caller wait on the network.
+   * Never rejects: the sheet is a remote third party, so an unreachable or stalling host must not
+   * take the server down with it. The in-flight promise is returned so a reader that has no cache
+   * at all can wait for this fetch instead of starting a second one.
+   */
+  warmCache(): Promise<void> {
+    if (!this.warmup) {
+      this.warmup = this.ensureCached()
+        .catch((err) => {
+          console.error(
+            'Failed to load community sheet (continuing without it):',
+            err instanceof Error ? err.message : err
+          );
+        })
+        .finally(() => {
+          this.warmup = null;
+        });
+    }
+    return this.warmup;
   }
 
   /** Ensure cache is fresh, fetch if stale */
@@ -217,7 +240,17 @@ export class SheetProfileStore {
 
   /** Get cached profiles */
   async getProfiles(): Promise<SheetProfile[]> {
-    return (await this.readCache())?.profiles ?? [];
+    const cached = await this.readCache();
+    if (cached) return cached.profiles;
+
+    // Nothing on disk yet. If a warm-up is already running, wait it out rather than answering
+    // with an empty sheet; the fetch is deadline-bounded, so this cannot wait forever.
+    if (this.warmup) {
+      await this.warmup;
+      return (await this.readCache())?.profiles ?? [];
+    }
+
+    return [];
   }
 
   private async readCache(): Promise<Cache | null> {
