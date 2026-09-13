@@ -135,9 +135,9 @@ describe('AidenUpdateProfileSchema', () => {
   });
 
   test('checks pulse temperatures against the pulse count when both are patched', () => {
-    expect(
-      AidenUpdateProfileSchema.safeParse({ batchPulsesNumber: 1, batchPulseTemperatures: [96, 95] }).success
-    ).toBe(false);
+    expect(AidenUpdateProfileSchema.safeParse({ batchPulsesNumber: 1, batchPulseTemperatures: [96, 95] }).success).toBe(
+      false
+    );
     expect(AidenUpdateProfileSchema.safeParse({ batchPulseTemperatures: [96, 95] }).success).toBe(true);
   });
 });

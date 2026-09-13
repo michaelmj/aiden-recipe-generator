@@ -4,18 +4,16 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SHEET_MAX_BYTES } from '@/config';
 import { SheetProfileStore } from '@/sheet/store';
+import type { ResponseBody } from './helpers/offline';
 
 const URL_OK = 'https://docs.google.com/spreadsheets/d/abc/export?format=csv&gid=0';
 
 /** Run sync() against a stubbed fetch, with a fresh HOME so nothing touches the real cache. */
-async function syncWith(
-  responder: (signal: AbortSignal) => Response,
-  opts?: { timeoutMs?: number }
-) {
+async function syncWith(responder: (signal: AbortSignal) => Response, opts?: { timeoutMs?: number }) {
   process.env.AIDEN_AI_DATA_DIR = mkdtempSync(join(tmpdir(), 'aiden-test-'));
   const realFetch = globalThis.fetch;
   globalThis.fetch = (async (_input: string | URL, init?: RequestInit) =>
-    responder(init?.signal as AbortSignal)) as typeof fetch;
+    responder(init?.signal as AbortSignal)) as unknown as typeof fetch;
   try {
     return await new SheetProfileStore({ csvUrl: URL_OK, ...opts }).sync({});
   } finally {
@@ -23,7 +21,7 @@ async function syncWith(
   }
 }
 
-function csvResponse(body: BodyInit) {
+function csvResponse(body: ResponseBody) {
   return new Response(body, { status: 200, headers: { 'content-type': 'text/csv' } });
 }
 

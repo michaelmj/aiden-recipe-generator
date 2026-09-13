@@ -46,7 +46,7 @@ describe('upstream error bodies', () => {
     tempDataDir();
     // A real Fellow error body can echo the submitted credentials straight back.
     const leaky = `{"message":"bad password ${SECRET_PASSWORD} for token ${SECRET_TOKEN}"}`;
-    const stub = (async () => new Response(leaky, { status: 401 })) as typeof fetch;
+    const stub = (async () => new Response(leaky, { status: 401 })) as unknown as typeof fetch;
 
     await withFetch(stub, async () => {
       const client = new FellowClient();
@@ -72,7 +72,7 @@ describe('upstream error bodies', () => {
     await store.write({ ...SESSION, accessTokenExpMs: Date.now() + 60 * 60 * 1000 });
 
     const leaky = `{"error":"token ${SECRET_TOKEN} rejected","stack":"internal detail"}`;
-    const stub = (async () => new Response(leaky, { status: 500 })) as typeof fetch;
+    const stub = (async () => new Response(leaky, { status: 500 })) as unknown as typeof fetch;
 
     await withFetch(stub, async () => {
       const err = await new FellowClient()

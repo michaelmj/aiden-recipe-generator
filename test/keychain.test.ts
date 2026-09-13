@@ -5,9 +5,9 @@
  * dialog and block. They are opt-in: run with AIDEN_TEST_KEYCHAIN=1.
  */
 
-import { randomBytes } from 'node:crypto';
 import { afterAll, describe, expect, test } from 'bun:test';
-import { MAX_SECRET_LENGTH, getKeychain } from '@/fellow/keychain';
+import { randomBytes } from 'node:crypto';
+import { getKeychain, MAX_SECRET_LENGTH } from '@/fellow/keychain';
 
 const SERVICE = 'aiden-ai-profile-generator-test';
 const ACCOUNT = `keychain-test-${process.pid}`;

@@ -28,7 +28,7 @@ describe('background sheet warm-up', () => {
     const store = freshStore();
     const failing = (async () => {
       throw new Error('getaddrinfo ENOTFOUND docs.google.com');
-    }) as typeof fetch;
+    }) as unknown as typeof fetch;
 
     await withFetch(failing, async () => {
       await expect(store.warmCache()).resolves.toBeUndefined();
@@ -47,7 +47,7 @@ describe('background sheet warm-up', () => {
         }
       });
       return new Response(body, { status: 200, headers: { 'content-type': 'text/csv' } });
-    }) as typeof fetch;
+    }) as unknown as typeof fetch;
 
     await withFetch(stalling, async () => {
       await expect(store.warmCache()).resolves.toBeUndefined();
@@ -59,7 +59,7 @@ describe('background sheet warm-up', () => {
     const slow = (async () => {
       await new Promise((resolve) => setTimeout(resolve, 25));
       return new Response(SAMPLE, { status: 200, headers: { 'content-type': 'text/csv' } });
-    }) as typeof fetch;
+    }) as unknown as typeof fetch;
 
     await withFetch(slow, async () => {
       const warm = store.warmCache(); // deliberately not awaited before the read
@@ -75,7 +75,7 @@ describe('background sheet warm-up', () => {
       calls++;
       await new Promise((resolve) => setTimeout(resolve, 10));
       return new Response(SAMPLE, { status: 200, headers: { 'content-type': 'text/csv' } });
-    }) as typeof fetch;
+    }) as unknown as typeof fetch;
 
     await withFetch(counting, async () => {
       await Promise.all([store.warmCache(), store.warmCache(), store.warmCache()]);

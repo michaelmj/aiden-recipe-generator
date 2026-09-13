@@ -12,7 +12,7 @@ async function syncCsv(csv: string) {
   process.env.AIDEN_AI_DATA_DIR = mkdtempSync(join(tmpdir(), 'aiden-test-'));
   const realFetch = globalThis.fetch;
   globalThis.fetch = (async () =>
-    new Response(csv, { status: 200, headers: { 'content-type': 'text/csv' } })) as typeof fetch;
+    new Response(csv, { status: 200, headers: { 'content-type': 'text/csv' } })) as unknown as typeof fetch;
   try {
     const store = new SheetProfileStore({ csvUrl: URL_OK });
     await store.sync({});

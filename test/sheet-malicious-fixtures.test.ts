@@ -37,11 +37,14 @@ const fixture = (name: string) => readFileSync(`test/fixtures/${name}`, 'utf8');
 /** Sync a CSV body through the store and return the profiles it was willing to keep. */
 async function profilesFrom(csv: string, contentType = 'text/csv'): Promise<SheetProfile[]> {
   freshDataDir();
-  return withFetch(respondWith(() => csvResponse(csv, contentType)), async () => {
-    const store = new SheetProfileStore({ csvUrl: SHEET_URL });
-    await store.sync({});
-    return store.getProfiles();
-  });
+  return withFetch(
+    respondWith(() => csvResponse(csv, contentType)),
+    async () => {
+      const store = new SheetProfileStore({ csvUrl: SHEET_URL });
+      await store.sync({});
+      return store.getProfiles();
+    }
+  );
 }
 
 type ToolResult = { content: { type: 'text'; text: string }[]; structuredContent: Record<string, unknown> };
@@ -50,22 +53,25 @@ type ToolHandler = (args: Record<string, unknown>) => Promise<ToolResult>;
 /** Run a CSV all the way out through the sheet.list tool, as an agent would see it. */
 async function sheetListText(csv: string): Promise<{ text: string; structured: Record<string, unknown> }> {
   freshDataDir();
-  return withFetch(respondWith(() => csvResponse(csv)), async () => {
-    const store = new SheetProfileStore({ csvUrl: SHEET_URL });
-    await store.sync({});
+  return withFetch(
+    respondWith(() => csvResponse(csv)),
+    async () => {
+      const store = new SheetProfileStore({ csvUrl: SHEET_URL });
+      await store.sync({});
 
-    const handlers = new Map<string, ToolHandler>();
-    const stub = {
-      registerTool(name: string, _config: unknown, handler: ToolHandler) {
-        handlers.set(name, handler);
-      }
-    };
-    registerSheetTools(stub as unknown as McpServer, store);
+      const handlers = new Map<string, ToolHandler>();
+      const stub = {
+        registerTool(name: string, _config: unknown, handler: ToolHandler) {
+          handlers.set(name, handler);
+        }
+      };
+      registerSheetTools(stub as unknown as McpServer, store);
 
-    const res = await handlers.get('sheet.list')?.({});
-    if (!res) throw new Error('sheet.list was not registered');
-    return { text: res.content[0]?.text ?? '', structured: res.structuredContent };
-  });
+      const res = await handlers.get('sheet.list')?.({});
+      if (!res) throw new Error('sheet.list was not registered');
+      return { text: res.content[0]?.text ?? '', structured: res.structuredContent };
+    }
+  );
 }
 
 describe('the suite itself never reaches the network', () => {
@@ -161,9 +167,14 @@ describe('CSV bombs (nh5.4, nh5.6)', () => {
       }
     });
 
-    await withFetch(respondWith(() => csvResponse(endless)), async () => {
-      await expect(new SheetProfileStore({ csvUrl: SHEET_URL }).sync({})).rejects.toThrow(/exceeded the \d+ byte limit/i);
-    });
+    await withFetch(
+      respondWith(() => csvResponse(endless)),
+      async () => {
+        await expect(new SheetProfileStore({ csvUrl: SHEET_URL }).sync({})).rejects.toThrow(
+          /exceeded the \d+ byte limit/i
+        );
+      }
+    );
     expect(served).toBeLessThan(SHEET_MAX_BYTES * 2);
   });
 });
@@ -180,11 +191,14 @@ describe('an HTML page served as the sheet (nh5.4)', () => {
     // fail closed. No column survives sanitizing, and a parse with nothing left is reported as a
     // failure rather than written to the cache (aiden-recipe-generator-kdm).
     freshDataDir();
-    await withFetch(respondWith(() => csvResponse(fixture('sheet-html-error.csv'))), async () => {
-      const store = new SheetProfileStore({ csvUrl: SHEET_URL });
-      await expect(store.sync({})).rejects.toThrow(/no usable profiles/i);
-      expect(await store.getProfiles()).toEqual([]);
-    });
+    await withFetch(
+      respondWith(() => csvResponse(fixture('sheet-html-error.csv'))),
+      async () => {
+        const store = new SheetProfileStore({ csvUrl: SHEET_URL });
+        await expect(store.sync({})).rejects.toThrow(/no usable profiles/i);
+        expect(await store.getProfiles()).toEqual([]);
+      }
+    );
   });
 
   test('a sign-in page cannot overwrite a good cache', async () => {
@@ -193,13 +207,19 @@ describe('an HTML page served as the sheet (nh5.4)', () => {
     freshDataDir();
     const store = new SheetProfileStore({ csvUrl: SHEET_URL });
 
-    await withFetch(respondWith(() => csvResponse(fixture('sheet-sample.csv'))), () => store.sync({}));
+    await withFetch(
+      respondWith(() => csvResponse(fixture('sheet-sample.csv'))),
+      () => store.sync({})
+    );
     const good = await store.getProfiles();
     expect(good.length).toBeGreaterThan(0);
 
-    await withFetch(respondWith(() => csvResponse(fixture('sheet-html-error.csv'))), async () => {
-      await expect(store.sync({})).rejects.toThrow(/no usable profiles/i);
-    });
+    await withFetch(
+      respondWith(() => csvResponse(fixture('sheet-html-error.csv'))),
+      async () => {
+        await expect(store.sync({})).rejects.toThrow(/no usable profiles/i);
+      }
+    );
     expect(await store.getProfiles()).toEqual(good);
   });
 });

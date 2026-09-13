@@ -12,6 +12,9 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+/** Whatever `new Response(...)` accepts as a body — `BodyInit` is not a global under tsc here. */
+export type ResponseBody = ConstructorParameters<typeof Response>[0];
+
 export class BlockedNetworkCallError extends Error {
   constructor(readonly url: string) {
     super(`Blocked network call to ${url}: tests must stub fetch (see test/helpers/offline.ts).`);
@@ -36,7 +39,7 @@ export function installOfflineGuard(): void {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
     blockedCalls.push(url);
     throw new BlockedNetworkCallError(url);
-  }) as typeof fetch;
+  }) as unknown as typeof fetch;
 }
 
 /**
@@ -55,11 +58,11 @@ export async function withFetch<T>(stub: typeof fetch, body: () => Promise<T>): 
 
 /** A fetch stub that answers every request with the same response. */
 export function respondWith(make: (input: string, init?: RequestInit) => Response): typeof fetch {
-  return (async (input: string | URL, init?: RequestInit) => make(String(input), init)) as typeof fetch;
+  return (async (input: string | URL, init?: RequestInit) => make(String(input), init)) as unknown as typeof fetch;
 }
 
 /** A 200 response shaped like the sheet export endpoint's. */
-export function csvResponse(body: BodyInit, contentType = 'text/csv'): Response {
+export function csvResponse(body: ResponseBody, contentType = 'text/csv'): Response {
   return new Response(body, { status: 200, headers: { 'content-type': contentType } });
 }
 

@@ -44,7 +44,7 @@ describe('redirect handling', () => {
     process.env.AIDEN_AI_DATA_DIR = mkdtempSync(join(tmpdir(), 'aiden-test-'));
     const { SheetProfileStore } = await import('@/sheet/store');
     const realFetch = globalThis.fetch;
-    globalThis.fetch = (async (input: string | URL) => responder(String(input))) as typeof fetch;
+    globalThis.fetch = (async (input: string | URL) => responder(String(input))) as unknown as typeof fetch;
     try {
       return await new SheetProfileStore({ csvUrl: GOOD }).sync({});
     } finally {
