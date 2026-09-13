@@ -31,6 +31,13 @@ Three ways the target URL is chosen (`src/sheet/store.ts:85`):
 2. `AIDEN_AI_SHEET_CSV_URL` env — operator-controlled, trusted.
 3. The hardcoded default — trusted.
 
+**Control (`nh5.2`, implemented):** every sheet URL passes `assertAllowedSheetUrl`
+(`src/sheet/url.ts`) before a request is made — https only, no credentials in the URL, hostname
+must match `getSheetHostAllowlist()` (default `docs.google.com`, extended only by the operator via
+`AIDEN_AI_SHEET_ALLOWED_HOSTS`). Redirects are followed manually, at most
+`SHEET_MAX_REDIRECTS` hops, and **each hop is re-checked** — otherwise a 302 from an allowed host
+would land anywhere.
+
 Path 1 is the SSRF: the fetched body is parsed, cached to disk, and echoed back through
 `sheet.list`, which makes it both a request primitive and a read primitive against the loopback
 interface, the LAN, and cloud metadata endpoints.

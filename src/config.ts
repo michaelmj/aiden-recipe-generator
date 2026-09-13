@@ -18,6 +18,26 @@ export const REQUEST_TIMEOUT_MS = 30_000;
 export const DEFAULT_SHEET_CSV_URL =
   'https://docs.google.com/spreadsheets/d/1mi-YS6JYfbX3wN1kZd6iu_q6mFlWM4Ah6N3Ox8eqRCA/export?format=csv&gid=0';
 
+/**
+ * Hosts the community sheet may be fetched from.
+ * The sheet URL is the one network target this server will follow to attacker-influenced values,
+ * so it is pinned to a host list rather than accepting any URL. Operators can add hosts with
+ * AIDEN_AI_SHEET_ALLOWED_HOSTS (comma-separated); the model cannot.
+ */
+export const DEFAULT_SHEET_HOSTS = ['docs.google.com'] as const;
+
+/** Allowed sheet hosts, including any operator additions from the environment. */
+export function getSheetHostAllowlist(): string[] {
+  const extra = (process.env.AIDEN_AI_SHEET_ALLOWED_HOSTS ?? '')
+    .split(',')
+    .map((h) => h.trim().toLowerCase())
+    .filter(Boolean);
+  return [...DEFAULT_SHEET_HOSTS, ...extra];
+}
+
+/** Maximum redirects followed when fetching the sheet; each hop is re-checked against the allowlist. */
+export const SHEET_MAX_REDIRECTS = 3;
+
 /** Local data directory (~/.aiden-ai-profile-generator) */
 export function getAppDataDir() {
   return join(homedir(), `.${APP_ID}`);

@@ -15,7 +15,7 @@ async function parseFixture(csv: string) {
   globalThis.fetch = (async () =>
     new Response(csv, { status: 200, headers: { 'content-type': 'text/csv' } })) as typeof fetch;
   try {
-    const store = new SheetProfileStore({ csvUrl: 'https://example.invalid/sheet.csv' });
+    const store = new SheetProfileStore({ csvUrl: 'https://docs.google.com/spreadsheets/d/test/export?format=csv' });
     await store.sync({});
     return await store.getProfiles();
   } finally {

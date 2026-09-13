@@ -6,7 +6,8 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parse } from 'csv-parse/sync';
-import { DEFAULT_SHEET_CSV_URL, getAppDataDir } from '@/config';
+import { DEFAULT_SHEET_CSV_URL, getAppDataDir, SHEET_MAX_REDIRECTS } from '@/config';
+import { assertAllowedSheetUrl } from '@/sheet/url';
 
 /** A profile from the community Google Sheet */
 export type SheetProfile = {
@@ -73,6 +74,33 @@ function parseProfiles(csv: string): SheetProfile[] {
 }
 
 /**
+ * Fetch the sheet, re-checking the allowlist on every redirect hop.
+ * Redirects are handled manually: the platform would otherwise follow a 302 to any host, which
+ * would defeat the check on the initial URL.
+ */
+async function fetchAllowedSheet(startUrl: string): Promise<{ res: Response; url: string }> {
+  let target = assertAllowedSheetUrl(startUrl).toString();
+
+  for (let hop = 0; hop <= SHEET_MAX_REDIRECTS; hop++) {
+    const res = await fetch(target, {
+      headers: { Accept: 'text/csv,*/*' },
+      redirect: 'manual'
+    });
+
+    const isRedirect = res.status >= 300 && res.status < 400;
+    if (!isRedirect) return { res, url: target };
+
+    const location = res.headers.get('location');
+    if (!location) throw new Error(`Sheet host returned ${res.status} with no Location header.`);
+
+    // Relative redirects resolve against the current target, then face the same host check.
+    target = assertAllowedSheetUrl(new URL(location, target).toString()).toString();
+  }
+
+  throw new Error(`Sheet URL exceeded ${SHEET_MAX_REDIRECTS} redirects.`);
+}
+
+/**
  * Manages fetching and caching community profiles from Google Sheets.
  * Cache TTL defaults to 6 hours.
  */
@@ -96,12 +124,10 @@ export class SheetProfileStore {
 
   /** Fetch fresh data from the sheet and update cache */
   async sync({ csvUrl }: { csvUrl?: string }) {
-    const url = csvUrl ?? this.csvUrl;
-    const res = await fetch(url, { headers: { Accept: 'text/csv,*/*' } });
+    const { res, url } = await fetchAllowedSheet(csvUrl ?? this.csvUrl);
 
     if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error(`Failed to fetch sheet CSV (${res.status}): ${text.slice(0, 500)}`);
+      throw new Error(`Failed to fetch sheet CSV (${res.status}).`);
     }
 
     const profiles = parseProfiles(await res.text());
