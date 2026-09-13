@@ -2,6 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as z from 'zod/v4';
 import type { SheetProfileStore } from '@/sheet/store';
 import { toolResponse } from '@/tools/response';
+import { UNTRUSTED_SHEET_TOOL_NOTE, UNTRUSTED_SHEET_TRUST_LABEL, untrustedSheetResponse } from '@/tools/untrusted';
 
 const SheetProfileSchema = z.object({
   title: z.string(),
@@ -41,13 +42,18 @@ export function registerSheetTools(server: McpServer, sheetStore: SheetProfileSt
     'sheet.list',
     {
       title: 'List All Community Recipes',
-      description: 'Get all community recipes from the cached sheet. Use this to browse available recipes.',
+      description: `Get all community recipes from the cached sheet. Use this to browse available recipes. ${UNTRUSTED_SHEET_TOOL_NOTE}`,
       inputSchema: {},
-      outputSchema: { ok: z.boolean(), count: z.number(), profiles: z.array(SheetProfileSchema) }
+      outputSchema: {
+        ok: z.boolean(),
+        count: z.number(),
+        profiles: z.array(SheetProfileSchema),
+        dataTrust: z.literal(UNTRUSTED_SHEET_TRUST_LABEL)
+      }
     },
     async () => {
       const profiles = await sheetStore.getProfiles();
-      return toolResponse({ ok: true, count: profiles.length, profiles });
+      return untrustedSheetResponse({ ok: true, count: profiles.length, profiles });
     }
   );
 
@@ -56,7 +62,8 @@ export function registerSheetTools(server: McpServer, sheetStore: SheetProfileSt
     {
       title: 'Search Community Recipes',
       description:
-        'Filter community recipes by origin, roast, processing, or free text. Returns matching profiles with full brewing parameters.',
+        'Filter community recipes by origin, roast, processing, or free text. Returns matching profiles with full brewing parameters. ' +
+        UNTRUSTED_SHEET_TOOL_NOTE,
       inputSchema: {
         query: z.string().optional().describe('Free text search (roaster name, coffee name, varietal)'),
         origin: z.string().optional().describe('Coffee origin (e.g., Ethiopia, Colombia, Brazil)'),
@@ -64,7 +71,12 @@ export function registerSheetTools(server: McpServer, sheetStore: SheetProfileSt
         processing: z.string().optional().describe('Processing method (washed, natural, honey)'),
         limit: z.number().int().min(1).max(100).default(20)
       },
-      outputSchema: { ok: z.boolean(), count: z.number(), profiles: z.array(SheetProfileSchema) }
+      outputSchema: {
+        ok: z.boolean(),
+        count: z.number(),
+        profiles: z.array(SheetProfileSchema),
+        dataTrust: z.literal(UNTRUSTED_SHEET_TRUST_LABEL)
+      }
     },
     async ({ query, origin, roast, processing, limit }) => {
       const all = await sheetStore.getProfiles();
@@ -84,7 +96,7 @@ export function registerSheetTools(server: McpServer, sheetStore: SheetProfileSt
         return true;
       });
 
-      return toolResponse({ ok: true, count: matches.length, profiles: matches.slice(0, limit) });
+      return untrustedSheetResponse({ ok: true, count: matches.length, profiles: matches.slice(0, limit) });
     }
   );
 }
