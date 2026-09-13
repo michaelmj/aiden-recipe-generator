@@ -58,6 +58,17 @@ describe('redirect handling', () => {
     ).rejects.toThrow(/not an allowed sheet host/i);
   });
 
+  test('an off-allowlist operator URL is still refused', async () => {
+    process.env.AIDEN_AI_SHEET_CSV_URL = 'https://evil.example/sheet.csv';
+    try {
+      process.env.HOME = mkdtempSync(join(tmpdir(), 'aiden-test-'));
+      const { SheetProfileStore } = await import('@/sheet/store');
+      await expect(new SheetProfileStore().sync({})).rejects.toThrow(/not an allowed sheet host/i);
+    } finally {
+      delete process.env.AIDEN_AI_SHEET_CSV_URL;
+    }
+  });
+
   test('stops after too many redirects', async () => {
     await expect(
       syncWith((url) => new Response(null, { status: 302, headers: { location: `${url}&hop=1` } }))

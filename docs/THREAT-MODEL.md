@@ -26,8 +26,9 @@ writes arbitrary text into any cell. Fetched in `SheetProfileStore.sync` (`src/s
 ### S2. Sheet **URL** — attacker-*influenceable* target
 
 Three ways the target URL is chosen (`src/sheet/store.ts:85`):
-1. `sheet.sync`'s `csvUrl` argument — supplied by the **model** (`src/tools/sheet.ts:31`, only
-   `z.string().url()`), so any text the model has read can talk it into a new target.
+1. ~~`sheet.sync`'s `csvUrl` argument~~ — **removed** (`nh5.3`). The tool now takes no input; the
+   fetch target is never chosen per call, so no text the model has read can steer it. The response
+   still reports which URL was fetched.
 2. `AIDEN_AI_SHEET_CSV_URL` env — operator-controlled, trusted.
 3. The hardcoded default — trusted.
 

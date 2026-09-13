@@ -26,11 +26,15 @@ export function registerSheetTools(server: McpServer, sheetStore: SheetProfileSt
     'sheet.sync',
     {
       title: 'Sync Community Sheet',
-      description: 'Fetch the public CSV export and update the local cache of community profiles.',
-      inputSchema: { csvUrl: z.string().url().optional() },
+      description:
+        'Refresh the local cache of community profiles from the configured community sheet. ' +
+        'The source URL is set by the operator (AIDEN_AI_SHEET_CSV_URL) and cannot be chosen per call; ' +
+        'the response reports which URL was fetched.',
+      inputSchema: {},
       outputSchema: { ok: z.boolean(), csvUrl: z.string(), profileCount: z.number() }
     },
-    async ({ csvUrl }) => toolResponse(await sheetStore.sync({ csvUrl }))
+    // No csvUrl argument: the fetch target must not be steerable by anything the model has read.
+    async () => toolResponse(await sheetStore.sync({}))
   );
 
   server.registerTool(
