@@ -1,0 +1,6 @@
+<!DOCTYPE html>
+<html><head><title>Sign in - Google Accounts</title></head>
+<body><h1>Sign in to continue to Sheets</h1>
+<form action="/signin"><input name="identifier"></form>
+<script>window.location='https://accounts.google.com/signin'</script>
+</body></html>
