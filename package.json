@@ -19,7 +19,9 @@
     "check": "biome check src",
     "check:fix": "biome check --write src",
     "test": "bun test",
-    "audit": "node scripts/dep-audit.mjs --fail-on=high"
+    "audit": "node scripts/dep-audit.mjs --fail-on=high",
+    "deps:scripts": "node scripts/check-install-scripts.mjs",
+    "deps:verify": "bun install --frozen-lockfile --ignore-scripts && bun run deps:scripts && bun run audit"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.30.0",

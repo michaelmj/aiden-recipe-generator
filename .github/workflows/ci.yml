@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Daily, so a newly published advisory fails the build without a code change.
+    - cron: '17 6 * * *'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      # --frozen-lockfile: bun.lock is authoritative; a drifting manifest fails here.
+      # --ignore-scripts: no dependency runs code at install time (see CONTRIBUTING.md).
+      - name: Install (no scripts, frozen lockfile)
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Lockfile unchanged by install
+        run: git diff --exit-code -- bun.lock package.json
+
+      - name: No install scripts in the tree
+        run: bun run deps:scripts
+
+      - name: Advisory audit
+        run: bun run audit
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Test
+        run: bun test

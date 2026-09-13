@@ -68,8 +68,7 @@ That is a second, unpinned-by-hash artifact entering the machine at install time
 matching one installs. Dev-only.
 
 Verifying the full install-script set requires an actual install; do it with scripts disabled and
-then inspect (`bun pm untrusted`, or `npm ls --parseable` + `npm rebuild --dry-run`). Tracked in
-`nh5.13`.
+then inspect. Done in `nh5.13` — see *Install policy* below.
 
 ## Recommendations
 
@@ -141,3 +140,47 @@ deleted. No re-authentication needed.
 
 **Tests.** `test/keychain.test.ts`. The round-trip cases touch the real login keychain and can raise
 an OS access dialog, so they are opt-in: `AIDEN_TEST_KEYCHAIN=1 bun test`.
+
+## Install policy (2026-09-13, `nh5.13`)
+
+The policy itself lives in [`CONTRIBUTING.md`](../CONTRIBUTING.md#install-policy). Summary and the
+measurements behind it:
+
+**Install with scripts disabled.** `bun install --frozen-lockfile --ignore-scripts`, everywhere.
+Measured on bun 1.4.2: a plain `bun install` ran `keytar`'s install script (which downloads a native
+binary over the network) while `bun pm untrusted` reported **0 untrusted dependencies** — `keytar`
+sits on bun's built-in default-trusted allowlist. Bun's own gating therefore cannot be the control;
+the opt-out has to be explicit.
+
+**Verified, not assumed.** `scripts/check-install-scripts.mjs` (`bun run deps:scripts`) walks
+`node_modules/` and fails if any package present in `bun.lock` declares `preinstall`, `install`, or
+`postinstall`. `prepare` is excluded — it does not run for registry installs. Current state:
+
+```
+scanned 99 package(s) under node_modules/ (106 in bun.lock).
+No locked package runs an install script.
+```
+
+(99 on disk vs 106 in the lockfile: the difference is `@biomejs/biome`'s platform-specific optional
+binaries, only one of which installs.)
+
+The scan also flags packages on disk that are absent from the lockfile. On first run it found 34 —
+the entire `keytar` subtree (`prebuild-install`, `tar-fs`, `tunnel-agent`, `rc`, `minimist`, …) left
+behind by the pre-removal install, including `keytar`'s `install: prebuild-install || npm run
+build`. `bun install` does not prune them; `rm -rf node_modules && bun install --frozen-lockfile
+--ignore-scripts` does, and that has been run.
+
+**Lockfile authoritative.** Direct dependencies are pinned exact (no `^`/`~`). CI installs frozen
+and then asserts `git diff --exit-code -- bun.lock package.json`, so a manifest/lockfile mismatch
+fails the build.
+
+**Advisories fail the build.** `.github/workflows/ci.yml` runs `bun run audit` (non-zero at HIGH or
+above) on every push and PR, plus daily on a cron so a newly published advisory turns the build red
+with no code change. The same job runs the install-script check, typecheck, and `bun test`. `bun run
+check` is not in CI yet — pre-existing format drift in `src/`, tracked in `aiden-recipe-generator-74p`.
+
+`bun run deps:verify` runs the install, the script check, and the audit locally in one command.
+
+**Exception process** for a package that genuinely needs a lifecycle script: no script-free
+alternative, script read and summarized in the PR, package listed in both `trustedDependencies` and
+the checker's allowlist, rationale recorded here. Full text in `CONTRIBUTING.md`.

@@ -51,12 +51,16 @@ So I reverse-engineered the API requests the Fellow mobile app sends to the mach
 # Clone this repo
 git clone https://github.com/bxxf/aiden-recipe-generator.git
 
-# Install dependencies
-bun install
+# Install dependencies (lockfile is authoritative; no dependency runs install scripts)
+bun install --frozen-lockfile --ignore-scripts
 
 # Add to Claude Code
 claude mcp add aiden bun run /path-to-this-repo/src/index.ts
 ```
+
+Dependencies are treated as attack surface — see [CONTRIBUTING.md](CONTRIBUTING.md#install-policy)
+for the install policy (no lifecycle scripts, exact pins, reviewed lockfile, advisory audit in CI)
+and [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) for the current audit of the tree.
 
 ## Tools
 
