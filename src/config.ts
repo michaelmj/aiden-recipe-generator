@@ -52,6 +52,17 @@ export const SHEET_MAX_BYTES = 2 * 1024 * 1024;
 export const SHEET_ALLOWED_CONTENT_TYPES = ['text/csv', 'text/plain'] as const;
 
 /**
+ * Shape caps for the parsed CSV. The sheet is column-oriented: a row is one field label and a
+ * column is one recipe, so a crafted sheet grows cost in two directions. Anything past a cap is
+ * rejected rather than truncated, so a sheet that is quietly wrong is never served as if it were
+ * complete.
+ */
+export const SHEET_MAX_ROWS = 200;
+export const SHEET_MAX_COLUMNS = 2_000;
+/** Longest single CSV record csv-parse will buffer before raising (default is 128_000). */
+export const SHEET_MAX_RECORD_CHARS = 256_000;
+
+/**
  * Local data directory (~/.aiden-ai-profile-generator).
  * AIDEN_AI_DATA_DIR relocates it. Tests rely on this: os.homedir() ignores process.env.HOME under
  * Bun, so overriding HOME is not enough to keep a test run out of the real user's cache.

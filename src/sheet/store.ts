@@ -12,7 +12,10 @@ import {
   REQUEST_TIMEOUT_MS,
   SHEET_ALLOWED_CONTENT_TYPES,
   SHEET_MAX_BYTES,
-  SHEET_MAX_REDIRECTS
+  SHEET_MAX_COLUMNS,
+  SHEET_MAX_RECORD_CHARS,
+  SHEET_MAX_REDIRECTS,
+  SHEET_MAX_ROWS
 } from '@/config';
 import { sanitizeProfile } from '@/sheet/sanitize';
 import { assertAllowedSheetUrl } from '@/sheet/url';
@@ -58,11 +61,27 @@ const FIELD_MAP: Record<string, keyof SheetProfile> = {
 
 /** Parse CSV into SheetProfile array (sheet is column-oriented, not row-oriented) */
 function parseProfiles(csv: string): SheetProfile[] {
-  const rows = parse(csv, { relax_quotes: true, relax_column_count: true, skip_empty_lines: true }) as string[][];
+  // `to` stops the row allocation one past the cap: the extra row is what tells us the sheet was
+  // over the limit rather than merely close to it, so it can be rejected instead of truncated.
+  const rows = parse(csv, {
+    relax_quotes: true,
+    relax_column_count: true,
+    skip_empty_lines: true,
+    max_record_size: SHEET_MAX_RECORD_CHARS,
+    to: SHEET_MAX_ROWS + 1
+  }) as string[][];
+
   if (rows.length < 3) throw new Error('Sheet CSV looks empty/unexpected.');
+  if (rows.length > SHEET_MAX_ROWS) {
+    throw new Error(`Sheet CSV has more than ${SHEET_MAX_ROWS} rows.`);
+  }
 
   const labels = rows.map((r) => r[0]?.trim() ?? '');
+  // Column 0 holds the labels, so the widest row sets how many recipes the sheet claims.
   const colCount = Math.max(...rows.map((r) => r.length));
+  if (colCount - 1 > SHEET_MAX_COLUMNS) {
+    throw new Error(`Sheet CSV has more than ${SHEET_MAX_COLUMNS} recipe columns.`);
+  }
 
   return Array.from({ length: colCount - 1 }, (_, i) => {
     const col = i + 1;
