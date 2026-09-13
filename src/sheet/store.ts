@@ -7,6 +7,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parse } from 'csv-parse/sync';
 import { DEFAULT_SHEET_CSV_URL, getAppDataDir, SHEET_MAX_REDIRECTS } from '@/config';
+import { sanitizeProfile } from '@/sheet/sanitize';
 import { assertAllowedSheetUrl } from '@/sheet/url';
 
 /** A profile from the community Google Sheet */
@@ -58,18 +59,21 @@ function parseProfiles(csv: string): SheetProfile[] {
 
   return Array.from({ length: colCount - 1 }, (_, i) => {
     const col = i + 1;
-    const title = rows[0]?.[col]?.trim();
-    if (!title) return null;
+    const raw: Record<string, string> = {};
 
-    const profile: SheetProfile = { title };
+    const title = rows[0]?.[col]?.trim();
+    if (title) raw.title = title;
     labels.forEach((label, rowIdx) => {
       const field = FIELD_MAP[label];
       if (field) {
         const value = rows[rowIdx]?.[col]?.trim();
-        if (value) profile[field] = value;
+        if (value) raw[field] = value;
       }
     });
-    return profile;
+
+    // Every cell is stranger-written, so the column only becomes a profile if it survives
+    // sanitizing and range checks; a column that fails is dropped rather than partly trusted.
+    return sanitizeProfile(raw);
   }).filter((p): p is SheetProfile => p !== null);
 }
 
