@@ -171,6 +171,11 @@ let cache: Keychain | null | undefined;
 
 /** Resolve the OS keychain backend, or null when this platform has no usable one. */
 export async function getKeychain(): Promise<Keychain | null> {
+  // Opt-out seam: forces the no-keychain path without uninstalling the helper. Storing a session
+  // then also needs AIDEN_AI_ALLOW_PLAINTEXT_SESSION, so this alone cannot silently downgrade
+  // anyone to plaintext credentials.
+  if (process.env.AIDEN_AI_DISABLE_KEYCHAIN === '1') return null;
+
   if (cache !== undefined) return cache;
 
   if (platform() === 'darwin' && (await onPath('security'))) {

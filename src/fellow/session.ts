@@ -3,7 +3,8 @@
  *
  * The session blob is too large for the OS keychain helpers (see keychain.ts), so it is
  * kept in a 0600 file encrypted with AES-256-GCM under a data key that lives in the OS
- * keychain. Without the keychain the file holds plaintext and we say so loudly.
+ * keychain. Without a keychain the only option left is a plaintext file, so that path is refused
+ * unless the operator opts in with AIDEN_AI_ALLOW_PLAINTEXT_SESSION, and warns on every write.
  */
 
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
@@ -33,6 +34,18 @@ function encryptedSessionPath() {
 /** Plaintext session file (no keychain helper, or a pre-encryption install). */
 function sessionPath() {
   return join(getAppDataDir(), 'session.json');
+}
+
+/**
+ * Opt-in required before credentials are written unencrypted.
+ * Without a keychain helper the only fallback is a plaintext file, and silently writing an access
+ * token and refresh token to disk is not a default anyone should get by accident.
+ */
+const PLAINTEXT_OPT_IN_ENV = 'AIDEN_AI_ALLOW_PLAINTEXT_SESSION';
+
+function plaintextAllowed(): boolean {
+  const value = process.env[PLAINTEXT_OPT_IN_ENV]?.trim().toLowerCase();
+  return value === '1' || value === 'true' || value === 'yes';
 }
 
 /** AES-256-GCM envelope written to disk. */
@@ -89,12 +102,11 @@ async function readJson(path: string): Promise<unknown | null> {
 /**
  * Stores Fellow session securely.
  * Prefers the OS keychain (macOS Keychain via security(1), Linux Secret Service via
- * secret-tool(1)). Falls back to a 0600 JSON file when neither is available
- * (warning: credentials are stored in plaintext there).
+ * secret-tool(1)). With neither available, writing is refused unless
+ * AIDEN_AI_ALLOW_PLAINTEXT_SESSION is set, in which case credentials go to a 0600 JSON file in
+ * plaintext and every write says so.
  */
 export class SessionStore {
-  private warnedAboutPlaintext = false;
-
   /** Read the session, decrypting it when a keychain data key is available */
   async read(): Promise<Session | null> {
     const keychain = await getKeychain();
@@ -137,13 +149,20 @@ export class SessionStore {
       return;
     }
 
-    // Warn once about plaintext storage
-    if (!this.warnedAboutPlaintext) {
-      console.error(
-        `WARNING: no OS keychain helper found; storing credentials in plaintext at ${sessionPath()} (mode 0600). On Linux, install libsecret-tools for encrypted storage.`,
+    if (!plaintextAllowed()) {
+      throw new Error(
+        'No OS keychain helper found, so the Fellow session could only be stored unencrypted. ' +
+          'Refusing to write credentials in plaintext. On Linux install libsecret-tools ' +
+          `(secret-tool) for encrypted storage, or set ${PLAINTEXT_OPT_IN_ENV}=1 to accept ` +
+          'plaintext storage.'
       );
-      this.warnedAboutPlaintext = true;
     }
+
+    // Warned on every write, not once per process: this is the state of the credentials on disk,
+    // not a one-off setup notice, and a long-lived server would otherwise say it once and never again.
+    console.error(
+      `WARNING: no OS keychain helper found and ${PLAINTEXT_OPT_IN_ENV} is set; storing Fellow credentials in plaintext at ${sessionPath()} (mode 0600).`
+    );
 
     await writeFile(sessionPath(), JSON.stringify(session, null, 2), { mode: 0o600 });
   }

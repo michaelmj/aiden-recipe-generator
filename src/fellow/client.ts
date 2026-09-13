@@ -105,6 +105,26 @@ function toProfile(raw: Record<string, unknown>): Profile {
 const seg = (value: string) => encodeURIComponent(value);
 
 /**
+ * Describe a failed upstream call without quoting its body.
+ * Every thrown message reaches the model's context, and a Fellow error body can carry the bearer
+ * token that was sent, the account email, or the request payload, so only the status code and a
+ * fixed hint travel. See docs/THREAT-MODEL.md.
+ */
+function upstreamError(label: string, status: number): Error {
+  const hint =
+    status === 401 || status === 403
+      ? 'not authorized; call auth.login again'
+      : status === 404
+        ? 'not found'
+        : status === 429
+          ? 'rate limited by Fellow; retry later'
+          : status >= 500
+            ? 'Fellow service error; retry later'
+            : 'Fellow rejected the request';
+  return new Error(`${label} failed (${status}): ${hint}.`);
+}
+
+/**
  * Client for the Fellow Aiden API.
  * Handles auth, device queries, and profile management.
  */
@@ -125,8 +145,11 @@ export class FellowClient {
       });
 
       if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        throw new Error(`Login failed (${res.status}): ${text.slice(0, 500)}`);
+        // The body is not quoted: a login response can echo back the submitted email or password,
+        // and a thrown message travels straight into the model's context.
+        const reason =
+          res.status === 401 || res.status === 403 ? 'check the email and password' : 'Fellow rejected the login';
+        throw new Error(`Login failed (${res.status}): ${reason}.`);
       }
 
       const json = (await res.json()) as { accessToken?: string; refreshToken?: string; token?: string };
@@ -244,10 +267,7 @@ export class FellowClient {
         body: opts?.body ? JSON.stringify(opts.body) : undefined,
         signal: controller.signal
       });
-      if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        throw new Error(`${method} ${path} failed (${res.status}): ${text.slice(0, 1000)}`);
-      }
+      if (!res.ok) throw upstreamError(`${method} ${path}`, res.status);
 
       return res.headers.get('content-type')?.includes('application/json')
         ? ((await res.json()) as T)

@@ -11,7 +11,7 @@ network is not**, and the community spreadsheet in particular is editable by str
 
 | Asset | Where | Why it matters |
 |---|---|---|
-| Fellow session (access + refresh JWT, email) | AES-256-GCM in `~/.aiden-ai-profile-generator/session.enc.json`, key in the OS keychain; without a keychain helper, plaintext `session.json` mode 0600 (`src/fellow/session.ts`, `src/fellow/keychain.ts`) | Full control of the user's Fellow account |
+| Fellow session (access + refresh JWT, email) | AES-256-GCM in `~/.aiden-ai-profile-generator/session.enc.json`, key in the OS keychain; without a keychain helper the write is **refused** unless `AIDEN_AI_ALLOW_PLAINTEXT_SESSION` is set, which downgrades it to plaintext `session.json` mode 0600 and warns on every write (`src/fellow/session.ts`, `src/fellow/keychain.ts`) | Full control of the user's Fellow account |
 | The agent's context window | every tool response | Text placed here steers subsequent tool calls |
 | The physical brewer | `aiden.createProfile` / `aiden.updateProfile` | Heats water; parameters come from the agent |
 | Local brew history / settings | `~/.aiden-ai-profile-generator/*.json` (`src/storage/`) | Low value, but a persistence foothold |
@@ -45,12 +45,17 @@ interface, the LAN, and cloud metadata endpoints.
 
 ### S3. Fellow API responses — third-party, mostly trusted
 
-`FELLOW_API_BASE` (`src/config.ts:12`) is a **hardcoded constant with no env override** — verified:
-the only `process.env` read in `src/` is the sheet URL. The model cannot retarget it, so this is
-**allowed egress and stays allowed.** Any network hardening must be scoped to S2, never applied as a
-blanket egress block. Response *bodies* are still foreign data; `toDevice` / `toProfile`
-(`src/fellow/client.ts:56,73`) already coerce every field to a known type with fallbacks, which is
-the right pattern. Residual exposure: `Drops` profile titles originate with Fellow, not the user.
+`FELLOW_API_BASE` (`src/config.ts`) is a **hardcoded constant with no env override**. The env vars
+`src/` reads are the sheet URL and host allowlist, the data directory (`AIDEN_AI_DATA_DIR`), and the
+two credential-storage switches (`AIDEN_AI_DISABLE_KEYCHAIN`, `AIDEN_AI_ALLOW_PLAINTEXT_SESSION`) —
+none of them retarget the API base, and none are settable by the model. So this is **allowed egress
+and stays allowed.** Any network hardening must be scoped to S2, never applied as a blanket egress
+block. Response *bodies* are still foreign data; `toDevice` / `toProfile` (`src/fellow/client.ts`)
+already coerce every field to a known type with fallbacks, which is the right pattern. Error bodies
+are never quoted into a thrown message: a Fellow error can echo the bearer token or the submitted
+password, and every thrown message reaches the agent's context, so only the status code and a fixed
+hint travel (`upstreamError`). Residual exposure: `Drops` profile titles originate with Fellow, not
+the user.
 
 ### S4. Tool arguments from the model
 
