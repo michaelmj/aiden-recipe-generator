@@ -74,10 +74,11 @@ whether the vulnerable code path is reachable from `src/`.
 ## Quality gates
 
 ```bash
-bun run typecheck
+bun run typecheck   # build config, then tsconfig.test.json for test/
 bun test
-bun run check        # biome lint + format
+bun run check       # biome lint + format, over src/ and test/
 ```
 
-CI runs typecheck and tests. `bun run check` is not in CI yet: `src/` has pre-existing format drift
-tracked in `aiden-recipe-generator-74p`; add the step to `.github/workflows/ci.yml` when that lands.
+CI runs all three. `typecheck` covers `test/` through `tsconfig.test.json`, which extends the build
+config and only adds `test/` and the bun globals — `tsconfig.json` stays src-only so `dist/` output
+is unchanged.

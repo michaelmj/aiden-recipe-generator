@@ -32,6 +32,10 @@ jobs:
       - name: Advisory audit
         run: bun run audit
 
+      # Lint and formatting, over src/ and test/ (biome.json owns the file list).
+      - name: Lint and format check
+        run: bun run check
+
       - name: Typecheck
         run: bun run typecheck
 
