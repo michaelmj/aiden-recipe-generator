@@ -2,8 +2,9 @@
 
 ## Install policy
 
-This server parses attacker-controlled text (the community sheet) and holds Fellow session
-credentials, so the dependency tree is treated as part of the attack surface. Three rules:
+This server parses text it did not write (the opt-in community sheet, and the bundled dataset when
+someone refreshes it from that sheet) and holds Fellow session credentials, so the dependency tree is
+treated as part of the attack surface. Three rules:
 
 ### 1. Install with scripts disabled
 
@@ -70,6 +71,35 @@ bun run deps:verify   # frozen + no-scripts install, script check, advisory audi
 
 Findings below HIGH still get triaged — they are logged in `docs/DEPENDENCIES.md` with a note on
 whether the vulnerable code path is reachable from `src/`.
+
+## Recipe sources
+
+A change that adds recipe data has to say which of the three sources it is coming from, because they
+carry different trust:
+
+| Source | Where it lives | What a PR must show |
+|---|---|---|
+| Bundled dataset (**default**) | `data/recipes.json`, loaded by `src/recipes/dataset.ts` | every record has a `source.kind`; anything not `first-party` carries `credit` and, where there is one, `url` |
+| Live community sheet (opt-in) | fetched only when the operator sets `AIDEN_AI_SHEET_CSV_URL` | no default URL is reintroduced, and records stay labelled `untrusted-community-sheet` |
+| Web search for a specific coffee | done by the agent per `CLAUDE.md`, outside this server | nothing — the server does not fetch it |
+
+Rules for the dataset:
+
+- **`first-party` means someone brewed it.** Not "a recipe that looks right" — tasted and rated. It
+  is the only kind with no stranger in its history, so it is the only kind that may be added without
+  a credit.
+- **`community-sheet` records arrive through a snapshot, never by hand.** Run `bun run
+  snapshot:sheet`, read the candidates, and copy keepers into `data/recipes.json` in a commit a human
+  reviewed. Update the `snapshots` entry (`takenAt`, `sha256`) in the same commit, so a later refresh
+  can diff against something.
+- **Loading is not trusting.** `src/recipes/dataset.ts` validates and sanitizes every record with the
+  same rules the sheet cells go through, and drops what fails. Do not add a bypass for "our own"
+  file — a bad edit to `data/recipes.json` is exactly the case those checks exist for.
+- **Do not restore a default sheet URL.** The world-writable sheet stopped being the default in
+  `aiden-recipe-generator-8z3.4`; a fetch happens only because an operator asked for it.
+
+Trust levels and the attacks behind them: [docs/THREAT-MODEL.md](docs/THREAT-MODEL.md); dataset
+format and review checklist: [data/README.md](data/README.md).
 
 ## Quality gates
 

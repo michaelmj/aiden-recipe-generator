@@ -5,7 +5,7 @@ An MCP server that talks to your Fellow Aiden coffee machine - built entirely wi
 **Send a photo or name of your coffee beans** to Claude, Cursor, or any MCP-compatible tool, and it will:
 
 - Search the internet for brewing recommendations for that specific coffee
-- Search a community database of Aiden recipes for similar origins/roasts
+- Search a bundled dataset of reviewed Aiden recipes for similar origins/roasts
 - Check your previous brews and feedback to learn what worked
 - Look up grind settings for your specific grinder model
 - Generate and push a custom brew profile directly to your Aiden
@@ -39,7 +39,7 @@ So I reverse-engineered the API requests the Fellow mobile app sends to the mach
 ## What It Does
 
 - **Web research** - Searches for brewing recommendations for your specific coffee
-- **Community recipes** - Searches a database of community Aiden recipes for similar coffees
+- **Recipe lookup** - Searches the bundled recipe dataset for similar coffees (see [Recipe sources](#recipe-sources))
 - **Grind settings** - Looks up recommended grind settings for your specific grinder
 - **Profile creation** - Creates and pushes custom brew profiles to your Aiden
 - **Memory** - Logs brews and feedback to learn from past attempts
@@ -73,20 +73,33 @@ and [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) for the current audit of the tr
 | `aiden.createProfile` | Create new brew profile |
 | `aiden.updateProfile` | Update existing profile |
 | `aiden.deleteProfile` | Delete a profile |
-| `sheet.search` | Search community recipes by origin/roast/processing |
+| `sheet.search` | Search recipes by origin/roast/processing (bundled dataset, plus the opt-in sheet) |
 | `memory.logBrew` | Log a brew attempt |
 | `memory.addFeedback` | Add taste feedback (rating, notes) |
 | `memory.findSimilar` | Find past brews with similar coffee |
 | `user.getSettings` | Get saved preferences |
 | `user.updateSettings` | Save preferences (grinder, device, etc.) |
 
-## Recipe data
+## Recipe sources
 
-Recipes ship with the server in [`data/recipes.json`](data/recipes.json); the live community sheet is
-opt-in (`AIDEN_AI_SHEET_CSV_URL`), not the default. Part of the bundled set is a reviewed snapshot of
-the public [Fellow Aiden community recipe sheet][sheet] — thanks to everyone who fills it in. Each of
-those records is credited in `source`, and the snapshot it came from (date and digest) is recorded in
-the file.
+Three different things feed a recipe, and they are not trusted alike:
+
+| Source | Default? | Who wrote it | How it is trusted |
+|---|---|---|---|
+| Bundled dataset — [`data/recipes.json`](data/recipes.json) | **yes** | the operator's own brews, plus a reviewed snapshot of a credited public sheet | ships with the code, no network call, every record names its `source`; still validated and sanitized on load |
+| Live community sheet — `AIDEN_AI_SHEET_CSV_URL` | no, opt-in | anyone with edit access to that sheet | treated as attacker-controlled: host-allowlisted fetch, range-checked cells, labelled `untrusted-community-sheet` and quarantined on the way to the agent |
+| Web search for the specific coffee | n/a | roasters, reviewers, whoever published the page | done by the agent per [CLAUDE.md](CLAUDE.md), outside this server — the server never fetches it |
+
+Set no env var and the server makes no recipe request at all: the dataset is read from disk and that
+is the whole source list. Records from either source carry a `trust` field in the tool response, so
+a reviewed bundled recipe is never confused with a line a stranger typed into a public sheet five
+minutes ago. Details in [docs/THREAT-MODEL.md](docs/THREAT-MODEL.md).
+
+### The bundled dataset
+
+Part of it is a reviewed snapshot of the public [Fellow Aiden community recipe sheet][sheet] — thanks
+to everyone who fills it in. Each of those records is credited in `source`, and the snapshot it came
+from (date and digest) is recorded in the file.
 
 Refreshing that snapshot is deliberate, never automatic:
 
@@ -98,6 +111,17 @@ Then read the candidates, fix what the sanitizer could not (the sheet writes rat
 temperatures in Fahrenheit), and copy the keepers into `data/recipes.json` as a commit someone
 reviewed. See [data/README.md](data/README.md) for the format and the review checklist.
 
+### Opting into the live sheet
+
+```bash
+AIDEN_AI_SHEET_CSV_URL="https://docs.google.com/.../pub?output=csv"   # opt in
+AIDEN_AI_SHEET_ALLOWED_HOSTS="sheets.example.com"                     # only if the host is not docs.google.com
+```
+
+Point it at a sheet only you can write and it is as trustworthy as you are; point it at the public
+community sheet and you are reading text strangers can edit. Either way it stays labelled untrusted,
+because the server cannot tell the two apart.
+
 [sheet]: https://docs.google.com/spreadsheets/d/1mi-YS6JYfbX3wN1kZd6iu_q6mFlWM4Ah6N3Ox8eqRCA
 
 ## How It Works
@@ -105,7 +129,7 @@ reviewed. See [data/README.md](data/README.md) for the format and the review che
 When you ask to brew a coffee:
 
 1. Checks your saved settings (grinder, default device)
-2. Searches community sheet for similar coffees
+2. Searches the bundled recipe dataset for similar coffees
 3. Checks your brew history for past attempts
 4. Searches the web for this specific coffee's recommendations
 5. Looks up grind settings for your grinder

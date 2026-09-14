@@ -5,7 +5,8 @@ Scope: the stdio MCP server in `src/`. Tracked by epic `aiden-recipe-generator-n
 ## Trust boundary in one sentence
 
 The server is trusted; the coffee machine account is trusted; **everything that arrives over the
-network is not**, and the community spreadsheet in particular is editable by strangers.
+network is not**, and the community spreadsheet in particular is editable by strangers — which is why
+it is no longer the default recipe source.
 
 ## Assets
 
@@ -15,6 +16,20 @@ network is not**, and the community spreadsheet in particular is editable by str
 | The agent's context window | every tool response | Text placed here steers subsequent tool calls |
 | The physical brewer | `aiden.createProfile` / `aiden.updateProfile` | Heats water; parameters come from the agent |
 | Local brew history / settings | `~/.aiden-ai-profile-generator/*.json` (`src/storage/`) | Low value, but a persistence foothold |
+
+## Recipe sources and what each is worth
+
+Three things can supply a recipe, and the default is now the one nobody else can write:
+
+| Source | Default? | Reaches the server how | Trust |
+|---|---|---|---|
+| Bundled dataset (`data/recipes.json`, `src/recipes/dataset.ts`) | **yes** | read from disk, no network | Highest available. First-party records were brewed by the operator; `community-sheet` records came through a reviewed, hash-recorded snapshot. Still validated and sanitized on load — a bad edit to our own file is in scope. Labelled `bundled-dataset`. |
+| Live community sheet (`AIDEN_AI_SHEET_CSV_URL`) | no — operator opt-in | HTTPS fetch, host-allowlisted, bounded, cached | None. This is S1 below. Labelled `untrusted-community-sheet` and quarantined in tool output. |
+| Web search for a specific coffee | n/a | the agent searches per `CLAUDE.md` | Outside this threat model: the server never issues the request and never parses the result. The agent's own handling of fetched pages is the host's problem, not this server's. |
+
+The first two are the only recipe text this server produces, and a reader can always tell them apart:
+every record carries a `trust` field (`src/tools/untrusted.ts`), and a response containing one live
+sheet record is quarantined whole.
 
 ## Sources — network input, ranked by who controls it
 
@@ -120,6 +135,7 @@ the sink (`.9`) is the control that does not depend on the agent behaving.
 |---|---|
 | S2 SSRF, off-host redirect | `nh5.2` (scoped to `SheetProfileStore.sync`; Fellow API stays allowed) |
 | S2 model-settable `csvUrl` | `nh5.3` |
+| S1 replaced as the default recipe source | `8z3` (`8z3.1` dataset, `8z3.2` snapshot, `8z3.4` default switch) |
 | S1 unbounded fetch (timeout, size, content-type) | `nh5.4` |
 | Startup availability | `nh5.5` |
 | CSV parser limits | `nh5.6` |
