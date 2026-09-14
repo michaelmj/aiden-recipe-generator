@@ -14,9 +14,18 @@ export const FELLOW_API_BASE = 'https://l8qtmnc692.execute-api.us-west-2.amazona
 /** HTTP request timeout in milliseconds */
 export const REQUEST_TIMEOUT_MS = 30_000;
 
-/** Community Aiden recipes spreadsheet */
-export const DEFAULT_SHEET_CSV_URL =
-  'https://docs.google.com/spreadsheets/d/1mi-YS6JYfbX3wN1kZd6iu_q6mFlWM4Ah6N3Ox8eqRCA/export?format=csv&gid=0';
+/**
+ * The community sheet URL, when an operator has opted in.
+ *
+ * There is deliberately no default (aiden-recipe-generator-8z3.4). The public sheet is
+ * world-writable, so it is no longer the source the server reaches for on its own: with nothing
+ * configured the bundled dataset is the only recipe source and no sheet request is ever made.
+ * Setting AIDEN_AI_SHEET_CSV_URL is what turns the live path back on, and its results stay
+ * quarantined as untrusted.
+ */
+export function getSheetCsvUrl(): string | undefined {
+  return process.env.AIDEN_AI_SHEET_CSV_URL?.trim() || undefined;
+}
 
 /**
  * Hosts the community sheet may be fetched from.

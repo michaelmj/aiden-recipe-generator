@@ -10,6 +10,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { APP_ID, APP_VERSION } from '@/config';
 import { FellowClient } from '@/fellow/client';
 import { registerPrompts } from '@/prompts';
+import { RecipeDataset } from '@/recipes/dataset';
 import { SheetProfileStore } from '@/sheet/store';
 import { registerAuthTools } from '@/tools/auth';
 import { registerDeviceTools } from '@/tools/device';
@@ -19,25 +20,35 @@ import { registerStorageTools } from '@/tools/storage';
 
 const server = new McpServer({ name: APP_ID, version: APP_VERSION });
 const fellow = new FellowClient();
+const dataset = new RecipeDataset();
 const sheetStore = new SheetProfileStore();
 
 // Register all tools
 registerAuthTools(server, fellow);
 registerDeviceTools(server, fellow);
 registerProfileTools(server, fellow);
-registerSheetTools(server, sheetStore);
+registerSheetTools(server, dataset, sheetStore);
 registerStorageTools(server);
 registerPrompts(server);
 
-/** Initialize the server: connect transport, then warm the sheet cache in the background. */
+/** Initialize the server: connect transport, then load the recipe sources in the background. */
 async function start() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error(`${APP_ID} running (stdio)`);
 
-  // Warm-up runs after the transport is live and is never awaited here: the community sheet is a
-  // remote third party, and an unreachable or stalling host must not delay or break startup.
-  // warmCache() swallows its own failures; sheet tools fall back to whatever is cached.
+  // The bundled dataset is a local file, so this is a read, not a fetch; it still runs after the
+  // transport is live so a slow disk cannot delay startup.
+  void dataset.load().then(({ kept, dropped }) => {
+    console.error(`Loaded ${kept} bundled recipes${dropped > 0 ? ` (${dropped} dropped)` : ''}`);
+  });
+
+  // The community sheet is opt-in, so with no AIDEN_AI_SHEET_CSV_URL this warm-up is a no-op and
+  // the server never touches the network. When it is configured, the warm-up is still never
+  // awaited: a remote third party must not delay or break startup. warmCache() swallows its own
+  // failures; the recipe tools fall back to whatever is cached.
+  if (!sheetStore.isConfigured()) return;
+
   void sheetStore
     .warmCache()
     .then(() => sheetStore.getProfiles())

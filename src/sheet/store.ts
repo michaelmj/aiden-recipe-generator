@@ -1,14 +1,18 @@
 /**
  * Community Sheet Store - fetches and caches Aiden recipes from a public Google Sheet.
  * The sheet contains user-submitted brew profiles with coffee details.
+ *
+ * This is the opt-in source, not the default one (aiden-recipe-generator-8z3.4): it does nothing
+ * at all unless an operator sets AIDEN_AI_SHEET_CSV_URL. When they do, the fetch stays bounded and
+ * host-checked and the profiles stay labelled untrusted all the way out to the agent.
  */
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parse } from 'csv-parse/sync';
 import {
-  DEFAULT_SHEET_CSV_URL,
   getAppDataDir,
+  getSheetCsvUrl,
   REQUEST_TIMEOUT_MS,
   SHEET_ALLOWED_CONTENT_TYPES,
   SHEET_MAX_BYTES,
@@ -183,16 +187,25 @@ async function readCappedText(res: Response, limitBytes: number): Promise<string
  * Cache TTL defaults to 6 hours.
  */
 export class SheetProfileStore {
-  private csvUrl: string;
+  private csvUrl: string | undefined;
   private cacheTtlMs: number;
   private timeoutMs: number;
   private cachePath = join(getAppDataDir(), 'sheetProfiles.json');
   private warmup: Promise<void> | null = null;
 
   constructor(opts?: { csvUrl?: string; cacheTtlMs?: number; timeoutMs?: number }) {
-    this.csvUrl = opts?.csvUrl ?? process.env.AIDEN_AI_SHEET_CSV_URL ?? DEFAULT_SHEET_CSV_URL;
+    this.csvUrl = opts?.csvUrl ?? getSheetCsvUrl();
     this.cacheTtlMs = opts?.cacheTtlMs ?? 6 * 60 * 60 * 1000;
     this.timeoutMs = opts?.timeoutMs ?? REQUEST_TIMEOUT_MS;
+  }
+
+  /**
+   * Whether an operator has opted into the live sheet.
+   * There is no fallback URL, so an unconfigured store is inert: it fetches nothing and serves
+   * nothing, and the bundled dataset is the whole recipe source.
+   */
+  isConfigured(): boolean {
+    return this.csvUrl !== undefined;
   }
 
   /**
@@ -202,6 +215,10 @@ export class SheetProfileStore {
    * at all can wait for this fetch instead of starting a second one.
    */
   warmCache(): Promise<void> {
+    // Nothing configured means nothing to warm; returning early is what keeps an unconfigured
+    // server off the network entirely.
+    if (!this.isConfigured()) return Promise.resolve();
+
     if (!this.warmup) {
       this.warmup = this.ensureCached()
         .catch((err) => {
@@ -219,6 +236,8 @@ export class SheetProfileStore {
 
   /** Ensure cache is fresh, fetch if stale */
   async ensureCached(): Promise<void> {
+    if (!this.isConfigured()) return;
+
     const cache = await this.readCache();
     if (!cache || Date.now() - cache.cachedAtMs > this.cacheTtlMs) {
       await this.sync({ csvUrl: this.csvUrl });
@@ -227,6 +246,14 @@ export class SheetProfileStore {
 
   /** Fetch fresh data from the sheet and update cache */
   async sync({ csvUrl }: { csvUrl?: string }) {
+    const target = csvUrl ?? this.csvUrl;
+    if (!target) {
+      throw new Error(
+        'No community sheet is configured. Set AIDEN_AI_SHEET_CSV_URL to opt into the live sheet; ' +
+          'the bundled dataset is the default recipe source.'
+      );
+    }
+
     // One deadline covers the redirect chain and the body read: a response that trickles forever
     // would otherwise hang start(), which awaits ensureCached() before the transport connects.
     const controller = new AbortController();
@@ -235,7 +262,7 @@ export class SheetProfileStore {
     let csv: string;
     let url: string;
     try {
-      const fetched = await fetchAllowedSheet(csvUrl ?? this.csvUrl, controller.signal);
+      const fetched = await fetchAllowedSheet(target, controller.signal);
       url = fetched.url;
 
       if (!fetched.res.ok) {
@@ -267,6 +294,10 @@ export class SheetProfileStore {
 
   /** Get cached profiles */
   async getProfiles(): Promise<SheetProfile[]> {
+    // An unconfigured store never serves sheet data, not even a cache a previously configured run
+    // left on disk: opting out has to actually stop the stranger-written recipes from coming back.
+    if (!this.isConfigured()) return [];
+
     const cached = await this.readCache();
     if (cached) return cached.profiles;
 

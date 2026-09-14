@@ -20,17 +20,24 @@ network is not**, and the community spreadsheet in particular is editable by str
 
 ### S1. Community sheet CSV — attacker-controlled content (**highest risk**)
 
-`DEFAULT_SHEET_CSV_URL` (`src/config.ts:19`) is a public Google Sheet. Anyone with edit access
-writes arbitrary text into any cell. Fetched in `SheetProfileStore.sync` (`src/sheet/store.ts:100`).
+A public Google Sheet, where anyone with edit access writes arbitrary text into any cell. Fetched
+in `SheetProfileStore.sync`.
+
+**Demoted to opt-in (`8z3.4`, implemented):** there is no longer a default sheet URL. The bundled
+dataset (`data/recipes.json`, loaded by `src/recipes/dataset.ts`) is the default source, and a
+server with no `AIDEN_AI_SHEET_CSV_URL` makes no sheet request at all — an operator who sets it
+opts back into this source knowingly, and every record it yields is still labelled
+`untrusted-community-sheet` and still quarantined on the way to the agent.
 
 ### S2. Sheet **URL** — attacker-*influenceable* target
 
-Three ways the target URL is chosen (`src/sheet/store.ts:85`):
+Ways the target URL is chosen:
 1. ~~`sheet.sync`'s `csvUrl` argument~~ — **removed** (`nh5.3`). The tool now takes no input; the
    fetch target is never chosen per call, so no text the model has read can steer it. The response
    still reports which URL was fetched.
-2. `AIDEN_AI_SHEET_CSV_URL` env — operator-controlled, trusted.
-3. The hardcoded default — trusted.
+2. `AIDEN_AI_SHEET_CSV_URL` env — operator-controlled, trusted, and now the only way a fetch
+   happens at all.
+3. ~~The hardcoded default~~ — **removed** (`8z3.4`).
 
 **Control (`nh5.2`, implemented):** every sheet URL passes `assertAllowedSheetUrl`
 (`src/sheet/url.ts`) before a request is made — https only, no credentials in the URL, hostname
