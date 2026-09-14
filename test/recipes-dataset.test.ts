@@ -11,6 +11,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { BUNDLED_DATASET_PATH, RecipeDataset } from '@/recipes/dataset';
+import { AidenCreateProfileSchema } from '@/schemas';
 import { blockedNetworkCalls, clearBlockedNetworkCalls } from './helpers/offline';
 
 const ESC = String.fromCharCode(27);
@@ -68,6 +69,39 @@ describe('loading', () => {
 
     const snapshots = await dataset.snapshots();
     expect(snapshots.some((s) => s.source === 'community-sheet' && Boolean(s.sha256))).toBe(true);
+  });
+
+  test("the operator's own brews are in the file, marked first-party", async () => {
+    // These are the highest-trust records the dataset can hold (aiden-recipe-generator-8z3.3):
+    // brewed and tasted by the operator, with no stranger anywhere in their history.
+    const dataset = new RecipeDataset({ path: BUNDLED_DATASET_PATH });
+    const own = (await dataset.list()).filter((r) => r.source.kind === 'first-party');
+    expect(own.length).toBeGreaterThan(0);
+    // Nothing to credit, because nobody else wrote them.
+    for (const recipe of own) expect(recipe.source.credit).toBeUndefined();
+  });
+
+  test('every bundled title is one the brewer would accept', async () => {
+    // A recipe the agent cannot push is a recipe that only looks usable: TitleSchema rejects
+    // characters the firmware does not take, so a title with a tilde or an em dash fails at the
+    // write, long after the dataset said it was fine.
+    const dataset = new RecipeDataset({ path: BUNDLED_DATASET_PATH });
+    for (const recipe of await dataset.list()) {
+      const parsed = AidenCreateProfileSchema.safeParse({
+        title: recipe.title.slice(0, 50),
+        ratio: 16,
+        bloomEnabled: true,
+        bloomRatio: 2,
+        bloomDuration: 45,
+        bloomTemperature: 96,
+        ssPulsesEnabled: true,
+        ssPulsesNumber: 3,
+        ssPulsesInterval: 23,
+        batchPulsesEnabled: true,
+        batchPulsesNumber: 1
+      });
+      expect(parsed.success, `${recipe.id}: ${recipe.title}`).toBe(true);
+    }
   });
 
   test('a missing file leaves an empty dataset rather than throwing', async () => {
