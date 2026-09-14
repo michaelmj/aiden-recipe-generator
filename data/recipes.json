@@ -1,4 +1,230 @@
 {
   "version": 1,
-  "recipes": []
+  "snapshots": [
+    {
+      "source": "community-sheet",
+      "credit": "Fellow Aiden community recipe sheet",
+      "url": "https://docs.google.com/spreadsheets/d/1mi-YS6JYfbX3wN1kZd6iu_q6mFlWM4Ah6N3Ox8eqRCA",
+      "takenAt": "2026-09-13",
+      "sha256": "1c510166f4ef4cbe785a20425b9cd03e3837086d1f2fc0648d318ad7a4f74a29"
+    }
+  ],
+  "recipes": [
+    {
+      "id": "sq-mile-eth-shoondhisa-30-dec-24",
+      "source": {
+        "kind": "community-sheet",
+        "credit": "Fellow Aiden community recipe sheet",
+        "url": "https://docs.google.com/spreadsheets/d/1mi-YS6JYfbX3wN1kZd6iu_q6mFlWM4Ah6N3Ox8eqRCA"
+      },
+      "title": "Sq Mile: Eth Shoondhisa 30-DEC-24",
+      "origin": "Guji, Ethiopia",
+      "roast": "Light",
+      "processing": "Natural",
+      "varietal": "Gibirinna 74110, Serto 74112",
+      "brewRatio": "16.5",
+      "bloomRatio": "3",
+      "bloomTime": "45",
+      "bloomTemp": "98",
+      "ssPulsesNumber": "3",
+      "ssPulsesInterval": "20",
+      "ssPulseTemps": "98",
+      "batchPulsesNumber": "4",
+      "batchPulsesInterval": "30",
+      "batchPulseTemps": "98,98,96,94",
+      "notes": "Reviewed from the 2026-09-13 sheet snapshot. The sheet writes ratios as 1:N and temperatures in Fahrenheit with Celsius in parentheses; both are transcribed here from its Celsius figures."
+    },
+    {
+      "id": "wonderstate-organic-ethiopia-danche",
+      "source": {
+        "kind": "community-sheet",
+        "credit": "Fellow Aiden community recipe sheet",
+        "url": "https://docs.google.com/spreadsheets/d/1mi-YS6JYfbX3wN1kZd6iu_q6mFlWM4Ah6N3Ox8eqRCA"
+      },
+      "title": "Wonderstate Organic Ethiopia Danche",
+      "origin": "Gedeb, Ethiopia",
+      "roast": "Light",
+      "processing": "Washed",
+      "varietal": "Landrace",
+      "brewRatio": "17",
+      "bloomRatio": "3",
+      "bloomTime": "45",
+      "bloomTemp": "96",
+      "ssPulsesNumber": "7",
+      "ssPulsesInterval": "20",
+      "ssPulseTemps": "96,96,95.5,95,94.5,94,93,93",
+      "batchPulsesNumber": "7",
+      "batchPulsesInterval": "20",
+      "batchPulseTemps": "96,96,95.5,95,94.5,94,93,93",
+      "notes": "Reviewed from the 2026-09-13 sheet snapshot. The sheet writes ratios as 1:N and temperatures in Fahrenheit with Celsius in parentheses; both are transcribed here from its Celsius figures. The sheet lists eight temperatures against seven pulses; both are kept as written."
+    },
+    {
+      "id": "la-cabra-kiamugumo",
+      "source": {
+        "kind": "community-sheet",
+        "credit": "Fellow Aiden community recipe sheet",
+        "url": "https://docs.google.com/spreadsheets/d/1mi-YS6JYfbX3wN1kZd6iu_q6mFlWM4Ah6N3Ox8eqRCA"
+      },
+      "title": "La Cabra Kiamugumo",
+      "origin": "Kenya",
+      "roast": "Light",
+      "processing": "Washed",
+      "varietal": "SL28, SL34",
+      "brewRatio": "16.5",
+      "bloomRatio": "3",
+      "bloomTime": "45",
+      "bloomTemp": "96",
+      "ssPulsesNumber": "3",
+      "ssPulsesInterval": "45",
+      "ssPulseTemps": "96,96,96",
+      "batchPulsesNumber": "3",
+      "batchPulsesInterval": "45",
+      "batchPulseTemps": "96,96,96",
+      "notes": "Reviewed from the 2026-09-13 sheet snapshot. The sheet writes ratios as 1:N and temperatures in Fahrenheit with Celsius in parentheses; both are transcribed here from its Celsius figures."
+    },
+    {
+      "id": "coffee-collective-kenya-kieni-ab-10-feb-25",
+      "source": {
+        "kind": "community-sheet",
+        "credit": "Fellow Aiden community recipe sheet",
+        "url": "https://docs.google.com/spreadsheets/d/1mi-YS6JYfbX3wN1kZd6iu_q6mFlWM4Ah6N3Ox8eqRCA"
+      },
+      "title": "Coffee Collective Kenya Kieni AB 10-FEB-25",
+      "origin": "Nyeri, Kenya",
+      "roast": "Light",
+      "processing": "Washed (Double Fermentation)",
+      "varietal": "SL28, SL34, Ruiru 11, Batian",
+      "brewRatio": "15.5",
+      "bloomRatio": "2",
+      "bloomTime": "40",
+      "bloomTemp": "94",
+      "ssPulsesNumber": "3",
+      "ssPulsesInterval": "23",
+      "ssPulseTemps": "94",
+      "batchPulsesNumber": "4",
+      "batchPulsesInterval": "30",
+      "batchPulseTemps": "94",
+      "notes": "Reviewed from the 2026-09-13 sheet snapshot. The sheet writes ratios as 1:N and temperatures in Fahrenheit with Celsius in parentheses; both are transcribed here from its Celsius figures."
+    },
+    {
+      "id": "linea-guatemala-la-esperanza-27-jan-25",
+      "source": {
+        "kind": "community-sheet",
+        "credit": "Fellow Aiden community recipe sheet",
+        "url": "https://docs.google.com/spreadsheets/d/1mi-YS6JYfbX3wN1kZd6iu_q6mFlWM4Ah6N3Ox8eqRCA"
+      },
+      "title": "Linea Guatemala La Esperanza 27-JAN-25",
+      "origin": "Antigua, Guatemala",
+      "roast": "Medium-Light",
+      "processing": "Washed",
+      "varietal": "Bourbon",
+      "brewRatio": "15.5",
+      "bloomRatio": "2.5",
+      "bloomTime": "23",
+      "bloomTemp": "93",
+      "ssPulsesNumber": "3",
+      "ssPulsesInterval": "23",
+      "ssPulseTemps": "93",
+      "batchPulsesNumber": "4",
+      "batchPulsesInterval": "30",
+      "batchPulseTemps": "93",
+      "notes": "Reviewed from the 2026-09-13 sheet snapshot. The sheet writes ratios as 1:N and temperatures in Fahrenheit with Celsius in parentheses; both are transcribed here from its Celsius figures."
+    },
+    {
+      "id": "proud-mary-ethiopia-yirg-adado-natural-10-dec-24",
+      "source": {
+        "kind": "community-sheet",
+        "credit": "Fellow Aiden community recipe sheet",
+        "url": "https://docs.google.com/spreadsheets/d/1mi-YS6JYfbX3wN1kZd6iu_q6mFlWM4Ah6N3Ox8eqRCA"
+      },
+      "title": "Proud Mary Ethiopia Yirg Adado Natural 10-DEC-24",
+      "origin": "Yirgacheffe, Ethiopia",
+      "roast": "Medium",
+      "processing": "Natural",
+      "varietal": "Heirloom",
+      "brewRatio": "16",
+      "bloomRatio": "2",
+      "bloomTime": "30",
+      "bloomTemp": "96",
+      "ssPulsesNumber": "3",
+      "ssPulsesInterval": "20",
+      "ssPulseTemps": "93.5,90.5,90.5",
+      "batchPulsesNumber": "3",
+      "batchPulsesInterval": "20",
+      "batchPulseTemps": "93.5,90.5,90.5",
+      "notes": "Reviewed from the 2026-09-13 sheet snapshot. The sheet writes ratios as 1:N and temperatures in Fahrenheit with Celsius in parentheses; both are transcribed here from its Celsius figures."
+    },
+    {
+      "id": "square-mile-decaf-filter-12-jan-25",
+      "source": {
+        "kind": "community-sheet",
+        "credit": "Fellow Aiden community recipe sheet",
+        "url": "https://docs.google.com/spreadsheets/d/1mi-YS6JYfbX3wN1kZd6iu_q6mFlWM4Ah6N3Ox8eqRCA"
+      },
+      "title": "Square Mile: Decaf Filter 12-JAN-25",
+      "origin": "Mexico",
+      "roast": "Light",
+      "processing": "Washed, Ethyl Acetate",
+      "varietal": "Caturra, Mondo Novo, Pluma Hidalgo",
+      "brewRatio": "15",
+      "bloomRatio": "3",
+      "bloomTime": "45",
+      "bloomTemp": "96",
+      "ssPulsesNumber": "2",
+      "ssPulsesInterval": "15",
+      "ssPulseTemps": "96",
+      "batchPulsesNumber": "3",
+      "batchPulsesInterval": "25",
+      "batchPulseTemps": "96,96,90",
+      "notes": "Reviewed from the 2026-09-13 sheet snapshot. The sheet writes ratios as 1:N and temperatures in Fahrenheit with Celsius in parentheses; both are transcribed here from its Celsius figures."
+    },
+    {
+      "id": "onyx-monarch-19-mar-25",
+      "source": {
+        "kind": "community-sheet",
+        "credit": "Fellow Aiden community recipe sheet",
+        "url": "https://docs.google.com/spreadsheets/d/1mi-YS6JYfbX3wN1kZd6iu_q6mFlWM4Ah6N3Ox8eqRCA"
+      },
+      "title": "Onyx Monarch 19-MAR-25",
+      "origin": "Colombia, Ethiopia",
+      "roast": "Dark",
+      "processing": "Washed",
+      "varietal": "Various",
+      "brewRatio": "16",
+      "bloomRatio": "3",
+      "bloomTime": "30",
+      "bloomTemp": "93",
+      "ssPulsesNumber": "3",
+      "ssPulsesInterval": "23",
+      "ssPulseTemps": "93,89,89",
+      "batchPulsesNumber": "1",
+      "batchPulsesInterval": "30",
+      "batchPulseTemps": "93",
+      "notes": "Reviewed from the 2026-09-13 sheet snapshot. The sheet writes ratios as 1:N and temperatures in Fahrenheit with Celsius in parentheses; both are transcribed here from its Celsius figures."
+    },
+    {
+      "id": "counter-culture-intango-dark-roast-17-feb-25",
+      "source": {
+        "kind": "community-sheet",
+        "credit": "Fellow Aiden community recipe sheet",
+        "url": "https://docs.google.com/spreadsheets/d/1mi-YS6JYfbX3wN1kZd6iu_q6mFlWM4Ah6N3Ox8eqRCA"
+      },
+      "title": "Counter Culture Intango Dark Roast 17-FEB-25",
+      "origin": "Karongi, Rwanda",
+      "roast": "Dark",
+      "processing": "Washed",
+      "varietal": "Bourbon, Mayaguez 71 & 139, Jackson",
+      "brewRatio": "17",
+      "bloomRatio": "2.5",
+      "bloomTime": "45",
+      "bloomTemp": "96",
+      "ssPulsesNumber": "3",
+      "ssPulsesInterval": "28",
+      "ssPulseTemps": "94.5",
+      "batchPulsesNumber": "1",
+      "batchPulsesInterval": "30",
+      "batchPulseTemps": "96",
+      "notes": "Reviewed from the 2026-09-13 sheet snapshot. The sheet writes ratios as 1:N and temperatures in Fahrenheit with Celsius in parentheses; both are transcribed here from its Celsius figures."
+    }
+  ]
 }

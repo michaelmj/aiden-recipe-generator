@@ -49,3 +49,52 @@ same range checks as sheet cells, which parse them; a value outside what an Aide
 | `roaster` | a recommendation the roaster published for that coffee | named, attributable |
 
 Anything not `first-party` should carry `credit` and, where there is one, `url`.
+
+## Snapshots
+
+Records that did not come from the operator's own brewing say where they did, and the file records
+the snapshot they were taken from:
+
+```json
+{
+  "version": 1,
+  "snapshots": [
+    {
+      "source": "community-sheet",
+      "credit": "Fellow Aiden community recipe sheet",
+      "url": "https://docs.google.com/spreadsheets/d/1mi-YS6JYfbX3wN1kZd6iu_q6mFlWM4Ah6N3Ox8eqRCA",
+      "takenAt": "2026-09-13",
+      "sha256": "1c510166f4ef4cbe785a20425b9cd03e3837086d1f2fc0648d318ad7a4f74a29"
+    }
+  ],
+  "recipes": []
+}
+```
+
+`sha256` is the digest of the CSV that was read, so a later refresh can show what changed instead of
+asserting that nothing did.
+
+## Refreshing the community snapshot
+
+```bash
+bun run snapshot:sheet   # → data/community-snapshot.json (git-ignored working file)
+```
+
+The script fetches the sheet once, through the same parser and caps as the live path, and writes one
+candidate per column. It writes nothing the server reads: each candidate carries a `review.raw` key
+holding the original cells, and that key is not part of the dataset format — a candidate pasted in
+unreviewed is rejected by the loader rather than shipped.
+
+Per candidate worth keeping:
+
+1. Compare the sanitized fields against `review.raw`. They disagree routinely: the sheet writes brew
+   ratios as `1:16`, and temperatures in Fahrenheit with Celsius in parentheses, so the range checks
+   drop those cells — or salvage a misleading fragment of a pulse-temp list. Transcribe by hand from
+   the sheet's Celsius figures.
+2. Sanity-check the result against what an Aiden can do and against the roast level.
+3. Delete `review`, keep `source` as `community-sheet` with its credit, and note anything odd about
+   the original in `notes`.
+4. Update the `snapshots` entry with the new date and `sha256` the script printed.
+
+The diff someone reads in step 4 is the whole point: it is what keeps these recipes from being live
+stranger input.

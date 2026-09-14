@@ -63,8 +63,13 @@ const FIELD_MAP: Record<string, keyof SheetProfile> = {
   'Batch Pulse Temps': 'batchPulseTemps'
 };
 
-/** Parse CSV into SheetProfile array (sheet is column-oriented, not row-oriented) */
-function parseProfiles(csv: string): SheetProfile[] {
+/**
+ * Split the CSV into one raw cell record per recipe column, before any sanitizing.
+ * Exported for the snapshot script (scripts/snapshot-community-sheet.ts), which shows the reviewer
+ * what a cell said next to what survived sanitizing — the sheet writes ratios as "1:16" and temps
+ * in Fahrenheit, so the two rarely match and the difference is the thing a human has to resolve.
+ */
+export function parseProfileCells(csv: string): Record<string, string>[] {
   // `to` stops the row allocation one past the cap: the extra row is what tells us the sheet was
   // over the limit rather than merely close to it, so it can be rejected instead of truncated.
   const rows = parse(csv, {
@@ -101,10 +106,17 @@ function parseProfiles(csv: string): SheetProfile[] {
       }
     });
 
-    // Every cell is stranger-written, so the column only becomes a profile if it survives
-    // sanitizing and range checks; a column that fails is dropped rather than partly trusted.
-    return sanitizeProfile(raw);
-  }).filter((p): p is SheetProfile => p !== null);
+    return raw;
+  });
+}
+
+/** Parse CSV into SheetProfile array (sheet is column-oriented, not row-oriented) */
+function parseProfiles(csv: string): SheetProfile[] {
+  // Every cell is stranger-written, so a column only becomes a profile if it survives sanitizing
+  // and range checks; a column that fails is dropped rather than partly trusted.
+  return parseProfileCells(csv)
+    .map((raw) => sanitizeProfile(raw))
+    .filter((p): p is SheetProfile => p !== null);
 }
 
 /**

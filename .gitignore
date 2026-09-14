@@ -10,6 +10,9 @@ dist/
 # local caches / secrets
 .aiden-ai-profile-generator/
 
+# working output of scripts/snapshot-community-sheet.ts; keepers are copied into data/recipes.json
+data/community-snapshot.json
+
 
 # Beads / Dolt files (added by bd init)
 .dolt/

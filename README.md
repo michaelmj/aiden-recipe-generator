@@ -80,6 +80,26 @@ and [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) for the current audit of the tr
 | `user.getSettings` | Get saved preferences |
 | `user.updateSettings` | Save preferences (grinder, device, etc.) |
 
+## Recipe data
+
+Recipes ship with the server in [`data/recipes.json`](data/recipes.json); the live community sheet is
+opt-in (`AIDEN_AI_SHEET_CSV_URL`), not the default. Part of the bundled set is a reviewed snapshot of
+the public [Fellow Aiden community recipe sheet][sheet] — thanks to everyone who fills it in. Each of
+those records is credited in `source`, and the snapshot it came from (date and digest) is recorded in
+the file.
+
+Refreshing that snapshot is deliberate, never automatic:
+
+```bash
+bun run snapshot:sheet          # writes candidates to data/community-snapshot.json (git-ignored)
+```
+
+Then read the candidates, fix what the sanitizer could not (the sheet writes ratios as `1:16` and
+temperatures in Fahrenheit), and copy the keepers into `data/recipes.json` as a commit someone
+reviewed. See [data/README.md](data/README.md) for the format and the review checklist.
+
+[sheet]: https://docs.google.com/spreadsheets/d/1mi-YS6JYfbX3wN1kZd6iu_q6mFlWM4Ah6N3Ox8eqRCA
+
 ## How It Works
 
 When you ask to brew a coffee:

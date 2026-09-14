@@ -49,11 +49,25 @@ describe('loading', () => {
     expect(blockedNetworkCalls()).toEqual([]);
   });
 
-  test('the file that ships with the server loads', async () => {
-    // It is empty until aiden-recipe-generator-8z3.2 and 8z3.3 seed it, but it must be readable and
-    // shaped correctly, or the default source is broken on install.
-    const report = await new RecipeDataset({ path: BUNDLED_DATASET_PATH }).load();
+  test('the file that ships with the server loads, and every record in it survives', async () => {
+    // A dropped record here means the file we ship disagrees with the loader that reads it, which
+    // would silently shrink the default source on install.
+    const dataset = new RecipeDataset({ path: BUNDLED_DATASET_PATH });
+    const report = await dataset.load();
     expect(report.dropped).toBe(0);
+    expect(report.kept).toBeGreaterThan(0);
+  });
+
+  test('records taken from the community sheet are credited, and the snapshot is recorded', async () => {
+    // The sheet is world-writable, so anything seeded from it (aiden-recipe-generator-8z3.2) has to
+    // say so — both on the record and as a snapshot the next refresh can be diffed against.
+    const dataset = new RecipeDataset({ path: BUNDLED_DATASET_PATH });
+    const fromSheet = (await dataset.list()).filter((r) => r.source.kind === 'community-sheet');
+    expect(fromSheet.length).toBeGreaterThan(0);
+    for (const recipe of fromSheet) expect(recipe.source.credit).toBeTruthy();
+
+    const snapshots = await dataset.snapshots();
+    expect(snapshots.some((s) => s.source === 'community-sheet' && Boolean(s.sha256))).toBe(true);
   });
 
   test('a missing file leaves an empty dataset rather than throwing', async () => {

@@ -78,9 +78,28 @@ const RecordSchema = z.strictObject({
   batchPulseTemps: z.string().optional()
 });
 
+/**
+ * A snapshot the dataset was seeded from: which document, when it was taken, and the digest of the
+ * bytes that were read. It is the credit for anything not first-party, and it is what makes a
+ * refresh checkable — re-fetch, re-hash, and the diff is what a human has to review.
+ */
+const SnapshotSchema = z.strictObject({
+  source: z.enum(['community-sheet', 'roaster']),
+  credit: z.string().min(1).max(200),
+  url: z.string().max(500).optional(),
+  takenAt: z.string().max(40),
+  sha256: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/, 'Snapshot digests are lowercase hex sha256.')
+    .optional()
+});
+
+export type Snapshot = z.infer<typeof SnapshotSchema>;
+
 /** The file itself. `version` exists so a format change can be detected rather than guessed at. */
 const FileSchema = z.strictObject({
   version: z.literal(1),
+  snapshots: z.array(SnapshotSchema).optional(),
   recipes: z.array(z.unknown())
 });
 
@@ -131,6 +150,7 @@ function toRecipe(raw: unknown): Recipe | null {
 export class RecipeDataset {
   private path: string;
   private recipes: Recipe[] | null = null;
+  private snapshotsRead: Snapshot[] = [];
   private report: LoadReport = { kept: 0, dropped: 0 };
 
   constructor(opts?: { path?: string }) {
@@ -177,8 +197,15 @@ export class RecipeDataset {
     if (dropped > 0) console.error(`Bundled recipe dataset: dropped ${dropped} record(s) that failed validation.`);
 
     this.recipes = kept;
+    this.snapshotsRead = parsed.data.snapshots ?? [];
     this.report = { kept: kept.length, dropped };
     return this.report;
+  }
+
+  /** Where the non-first-party records came from, for credit and for checking a refresh. */
+  async snapshots(): Promise<Snapshot[]> {
+    await this.load();
+    return this.snapshotsRead;
   }
 
   /** Every recipe that survived loading. */

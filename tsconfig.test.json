@@ -1,11 +1,12 @@
 {
-  // Typecheck-only config covering the test suite. The build config (tsconfig.json) stays
-  // src-only so dist output is unchanged; this one adds test/ and the bun test globals.
+  // Typecheck-only config covering the test suite and the maintainer scripts. The build config
+  // (tsconfig.json) stays src-only so dist output is unchanged; this one adds test/, scripts/ and
+  // the bun globals both rely on.
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "noEmit": true,
     "rootDir": ".",
     "types": ["node", "bun"]
   },
-  "include": ["src/**/*.ts", "test/**/*.ts"]
+  "include": ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.ts"]
 }
