@@ -2,6 +2,11 @@
 
 An MCP server that talks to your Fellow Aiden coffee machine - built entirely with Cursor.
 
+Fork of [bxxf/aiden-recipe-generator](https://github.com/bxxf/aiden-recipe-generator) by
+[Filip Brebera](https://github.com/bxxf), who wrote the Fellow API client, the MCP server and the
+original README. This fork adds the bundled recipe dataset, the threat model and the hardening
+work on the sheet ingest path.
+
 **Send a photo or name of your coffee beans** to Claude, Cursor, or any MCP-compatible tool, and it will:
 
 - Search the internet for brewing recommendations for that specific coffee
@@ -15,6 +20,8 @@ No more manually tweaking every variable in the Fellow app - just show it your c
 <img width="732" height="645" alt="ss-aiden" src="https://github.com/user-attachments/assets/3e304182-d40e-4570-ae2c-406f8a140f56" />
 
 ## Origin Story
+
+By Filip Brebera, from the upstream README:
 
 While at the Cafe Cursor event in Prague, I was thinking about what to build with Cursor. Until now I mostly used Claude Code, so I wanted a project from scratch where I could really test Cursor's capabilities.
 
@@ -49,7 +56,7 @@ So I reverse-engineered the API requests the Fellow mobile app sends to the mach
 
 ```bash
 # Clone this repo
-git clone https://github.com/bxxf/aiden-recipe-generator.git
+git clone https://github.com/michaelmj/aiden-recipe-generator.git
 
 # Install dependencies (lockfile is authoritative; no dependency runs install scripts)
 bun install --frozen-lockfile --ignore-scripts
@@ -155,4 +162,4 @@ Potential workaround: Fellow does support scheduled brews. If the API exposes sc
 
 ## License
 
-MIT
+MIT. Copyright (c) Filip Brebera and contributors to this fork.
