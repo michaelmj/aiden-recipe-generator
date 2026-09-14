@@ -81,7 +81,7 @@ carry different trust:
 |---|---|---|
 | Bundled dataset (**default**) | `data/recipes.json`, loaded by `src/recipes/dataset.ts` | every record has a `source.kind`; anything not `first-party` carries `credit` and, where there is one, `url` |
 | Live community sheet (opt-in) | fetched only when the operator sets `AIDEN_AI_SHEET_CSV_URL` | no default URL is reintroduced, and records stay labelled `untrusted-community-sheet` |
-| Web search for a specific coffee | done by the agent per `CLAUDE.md`, outside this server | nothing — the server does not fetch it |
+| Web search for a specific coffee | done by the agent per `AGENTS.md`, outside this server | nothing — the server does not fetch it |
 
 Rules for the dataset:
 

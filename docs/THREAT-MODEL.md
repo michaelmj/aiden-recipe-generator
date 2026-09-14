@@ -25,7 +25,7 @@ Three things can supply a recipe, and the default is now the one nobody else can
 |---|---|---|---|
 | Bundled dataset (`data/recipes.json`, `src/recipes/dataset.ts`) | **yes** | read from disk, no network | Highest available. First-party records were brewed by the operator; `community-sheet` records came through a reviewed, hash-recorded snapshot. Still validated and sanitized on load — a bad edit to our own file is in scope. Labelled `bundled-dataset`. |
 | Live community sheet (`AIDEN_AI_SHEET_CSV_URL`) | no — operator opt-in | HTTPS fetch, host-allowlisted, bounded, cached | None. This is S1 below. Labelled `untrusted-community-sheet` and quarantined in tool output. |
-| Web search for a specific coffee | n/a | the agent searches per `CLAUDE.md` | Outside this threat model: the server never issues the request and never parses the result. The agent's own handling of fetched pages is the host's problem, not this server's. |
+| Web search for a specific coffee | n/a | the agent searches per `AGENTS.md` | Outside this threat model: the server never issues the request and never parses the result. The agent's own handling of fetched pages is the host's problem, not this server's. |
 
 The first two are the only recipe text this server produces, and a reader can always tell them apart:
 every record carries a `trust` field (`src/tools/untrusted.ts`), and a response containing one live

@@ -104,7 +104,7 @@ Three different things feed a recipe, and they are not trusted alike:
 |---|---|---|---|
 | Bundled dataset — [`data/recipes.json`](data/recipes.json) | **yes** | the operator's own brews, plus a reviewed snapshot of a credited public sheet | ships with the code, no network call, every record names its `source`; still validated and sanitized on load |
 | Live community sheet — `AIDEN_AI_SHEET_CSV_URL` | no, opt-in | anyone with edit access to that sheet | treated as attacker-controlled: host-allowlisted fetch, range-checked cells, labelled `untrusted-community-sheet` and quarantined on the way to the agent |
-| Web search for the specific coffee | n/a | roasters, reviewers, whoever published the page | done by the agent per [CLAUDE.md](CLAUDE.md), outside this server — the server never fetches it |
+| Web search for the specific coffee | n/a | roasters, reviewers, whoever published the page | done by the agent per [AGENTS.md](AGENTS.md), outside this server — the server never fetches it |
 
 Set no env var and the server makes no recipe request at all: the dataset is read from disk and that
 is the whole source list. Records from either source carry a `trust` field in the tool response, so
@@ -162,4 +162,5 @@ Potential workaround: Fellow does support scheduled brews. If the API exposes sc
 
 ## License
 
-MIT. Copyright (c) Filip Brebera and contributors to this fork.
+MIT — see [LICENSE](LICENSE). Upstream declared MIT in `package.json` but shipped no license
+file; this fork adds the text, keeping Filip Brebera's copyright.
