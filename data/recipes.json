@@ -16,7 +16,7 @@
         "kind": "first-party"
       },
       "title": "Crimson: Edwin Norena Purple Honey",
-      "origin": "Colombia",
+      "origin": "Quindio, Colombia",
       "processing": "Purple Honey",
       "brewRatio": "15",
       "bloomRatio": "3",
@@ -27,7 +27,7 @@
       "ssPulseTemps": "95,94,93",
       "batchPulsesNumber": "1",
       "batchPulseTemps": "93",
-      "notes": "Own recipe, brewed on the operator's Aiden. 30 g at 450 ml. Ode Gen 2, standard burrs: start at 5 for 450 ml (range 5-5.1), 5.1-6 for 451-750 ml, 6-7 for 751-1000 ml. Doses: 40 g at 600 ml, 50 g at 750 ml, 66.7 g at 1000 ml. Title spells the producer without the tilde because profile titles the brewer accepts are ASCII only."
+      "notes": "Own recipe, brewed on the operator's Aiden. Tasting notes: blackberry, molasses, lemongrass. Grown at 1650 masl. 30 g at 450 ml. Ode Gen 2, standard burrs: start at 5 for 450 ml (range 5-5.1), 5.1-6 for 451-750 ml, 6-7 for 751-1000 ml. Doses: 40 g at 600 ml, 50 g at 750 ml, 66.7 g at 1000 ml. Title spells the producer without the tilde because profile titles the brewer accepts are ASCII only."
     },
     {
       "id": "atlas-guatemala-finca-arbelia",
@@ -36,6 +36,8 @@
       },
       "title": "Atlas: Guatemala Finca Arbelia",
       "origin": "Guatemala",
+      "roast": "Light",
+      "processing": "Washed",
       "brewRatio": "16",
       "bloomRatio": "3",
       "bloomTime": "45",
@@ -45,7 +47,7 @@
       "ssPulseTemps": "98,97,96",
       "batchPulsesNumber": "1",
       "batchPulseTemps": "96",
-      "notes": "Own recipe, brewed on the operator's Aiden. 28.1 g at 450 ml. Ode Gen 2, standard burrs: start at 4.1 for 450 ml (range 3.2-4.2), 4.2-5.2 for 451-750 ml, 5.1-6.1 for 751-1000 ml. Doses: 37.5 g at 600 ml, 46.9 g at 750 ml, 62.5 g at 1000 ml."
+      "notes": "Own recipe, brewed on the operator's Aiden. Tasting notes: cola, brown sugar, orange peel. 28.1 g at 450 ml. Ode Gen 2, standard burrs: start at 4.1 for 450 ml (range 3.2-4.2), 4.2-5.2 for 451-750 ml, 5.1-6.1 for 751-1000 ml. Doses: 37.5 g at 600 ml, 46.9 g at 750 ml, 62.5 g at 1000 ml."
     },
     {
       "id": "strange-matter-kenya-aa-katheri",
@@ -54,6 +56,8 @@
       },
       "title": "Strange Matter: Kenya AA Katheri",
       "origin": "Kenya",
+      "roast": "Light-Medium",
+      "processing": "Washed",
       "brewRatio": "16.5",
       "bloomRatio": "3",
       "bloomTime": "50",
@@ -63,7 +67,7 @@
       "ssPulseTemps": "98,98,96",
       "batchPulsesNumber": "1",
       "batchPulseTemps": "97",
-      "notes": "Own recipe, brewed on the operator's Aiden. 27.3 g at 450 ml. Ode Gen 2, standard burrs: start at 4 for 450 ml (range 3.2-4.1), 4.1-5.1 for 451-750 ml, 5-6 for 751-1000 ml. Doses: 36.4 g at 600 ml, 45.5 g at 750 ml, 60.6 g at 1000 ml. Longer 50 s bloom and a flat first two pulses at 98 C."
+      "notes": "Own recipe, brewed on the operator's Aiden. Tasting notes: tangerine, red apple, kiwi. 27.3 g at 450 ml. Ode Gen 2, standard burrs: start at 4 for 450 ml (range 3.2-4.1), 4.1-5.1 for 451-750 ml, 5-6 for 751-1000 ml. Doses: 36.4 g at 600 ml, 45.5 g at 750 ml, 60.6 g at 1000 ml. Longer 50 s bloom and a flat first two pulses at 98 C."
     },
     {
       "id": "strange-matter-rwanda-kawa-yacu-natural",
@@ -72,7 +76,9 @@
       },
       "title": "Strange Matter: Rwanda Kawa Yacu Natural",
       "origin": "Rwanda",
+      "roast": "Light-Medium",
       "processing": "Natural",
+      "varietal": "Bourbon",
       "brewRatio": "16",
       "bloomRatio": "3",
       "bloomTime": "45",
@@ -82,7 +88,7 @@
       "ssPulseTemps": "96,95,94",
       "batchPulsesNumber": "1",
       "batchPulseTemps": "95",
-      "notes": "Own recipe, brewed on the operator's Aiden. 28.1 g at 450 ml. Ode Gen 2, standard burrs: start at 4.2 for 450 ml (range 4.1-5), 4.2-5.2 for 451-750 ml, 5.2-6.2 for 751-1000 ml. Doses: 37.5 g at 600 ml, 46.9 g at 750 ml, 62.5 g at 1000 ml."
+      "notes": "Own recipe, brewed on the operator's Aiden. Tasting notes: jam, raspberry, strawberry. 28.1 g at 450 ml. Ode Gen 2, standard burrs: start at 4.2 for 450 ml (range 4.1-5), 4.2-5.2 for 451-750 ml, 5.2-6.2 for 751-1000 ml. Doses: 37.5 g at 600 ml, 46.9 g at 750 ml, 62.5 g at 1000 ml."
     },
     {
       "id": "sq-mile-eth-shoondhisa-30-dec-24",
