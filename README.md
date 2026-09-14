@@ -66,19 +66,28 @@ and [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) for the current audit of the tr
 
 | Tool | Description |
 |------|-------------|
-| `auth.login` | Login to Fellow account |
-| `auth.status` | Check login status |
+| `auth.login` | Login to Fellow and store the session locally (keychain when available) |
+| `auth.status` | Check whether a Fellow session is stored |
+| `auth.logout` | Clear the stored Fellow session |
 | `aiden.listDevices` | List connected Aiden brewers |
-| `aiden.listProfiles` | List profiles on device |
-| `aiden.createProfile` | Create new brew profile |
-| `aiden.updateProfile` | Update existing profile |
-| `aiden.deleteProfile` | Delete a profile |
+| `aiden.getDevice` | Get details for one device |
+| `aiden.listProfiles` | List brew profiles on a device |
+| `aiden.createProfile` | Create a new brew profile |
+| `aiden.updateProfile` | Update an existing Custom profile |
+| `aiden.deleteProfile` | Delete an existing Custom profile |
 | `sheet.search` | Search recipes by origin/roast/processing (bundled dataset, plus the opt-in sheet) |
-| `memory.logBrew` | Log a brew attempt |
-| `memory.addFeedback` | Add taste feedback (rating, notes) |
-| `memory.findSimilar` | Find past brews with similar coffee |
-| `user.getSettings` | Get saved preferences |
+| `sheet.list` | List every known recipe from both sources |
+| `sheet.sync` | Refresh the cached community sheet — a no-op unless an operator opted in |
+| `storage.logBrew` | Log a brew attempt |
+| `storage.addFeedback` | Add taste feedback to a logged brew (rating, notes) |
+| `storage.getHistory` | Get recent brew history with feedback |
+| `storage.search` | Search brew history by coffee name, roaster, or origin |
+| `storage.findSimilar` | Find past brews with similar coffee characteristics |
+| `user.getSettings` | Get saved preferences (grinder, default device) |
 | `user.updateSettings` | Save preferences (grinder, device, etc.) |
+
+The `sheet.*` names are historical: they read the bundled dataset first and only touch a live sheet
+when one is configured. See [Recipe sources](#recipe-sources).
 
 ## Recipe sources
 
