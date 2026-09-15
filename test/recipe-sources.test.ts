@@ -41,7 +41,11 @@ const BUNDLED = {
   brewRatio: '16.5'
 };
 
-type Record_ = { title: string; trust: string };
+type Record_ = {
+  title: string;
+  trust: string;
+  validation: { status: 'complete' | 'incomplete' | 'invalid'; missingFields: string[] };
+};
 const records = (structured: Record<string, unknown>) => structured.profiles as Record_[];
 
 /** Tools over a store with no AIDEN_AI_SHEET_CSV_URL — the default deployment. */
@@ -132,6 +136,9 @@ describe('with a sheet configured, its records stay untrusted alongside bundled 
     const byTitle = new Map(records(res.structuredContent).map((r) => [r.title, r.trust]));
     expect(byTitle.get('Ethiopia Guji Washed')).toBe('bundled-dataset');
     expect(byTitle.get('Stranger Sheet Coffee')).toBe('untrusted-community-sheet');
+    const sheet = records(res.structuredContent).find((record) => record.title === 'Stranger Sheet Coffee');
+    expect(sheet?.validation.status).toBe('incomplete');
+    expect(sheet?.validation.missingFields).toContain('bloomTemp');
   });
 
   test('one sheet record quarantines the whole response', async () => {

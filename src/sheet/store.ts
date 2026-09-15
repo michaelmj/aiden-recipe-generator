@@ -21,7 +21,7 @@ import {
   SHEET_MAX_REDIRECTS,
   SHEET_MAX_ROWS
 } from '@/config';
-import { sanitizeProfile } from '@/sheet/sanitize';
+import { type SanitizedSheetProfile, sanitizeProfile } from '@/sheet/sanitize';
 import { assertAllowedSheetUrl } from '@/sheet/url';
 
 /** A profile from the community Google Sheet */
@@ -43,7 +43,7 @@ export type SheetProfile = {
   batchPulseTemps?: string;
 };
 
-type Cache = { cachedAtMs: number; csvUrl: string; profiles: SheetProfile[] };
+type Cache = { cachedAtMs: number; csvUrl: string; profiles: SanitizedSheetProfile[] };
 
 /** Maps sheet column labels to SheetProfile fields */
 const FIELD_MAP: Record<string, keyof SheetProfile> = {
@@ -111,12 +111,12 @@ export function parseProfileCells(csv: string): Record<string, string>[] {
 }
 
 /** Parse CSV into SheetProfile array (sheet is column-oriented, not row-oriented) */
-function parseProfiles(csv: string): SheetProfile[] {
-  // Every cell is stranger-written, so a column only becomes a profile if it survives sanitizing
-  // and range checks; a column that fails is dropped rather than partly trusted.
+function parseProfiles(csv: string): SanitizedSheetProfile[] {
+  // Every cell is stranger-written. Invalid fields are removed, but their validation issues stay
+  // on the returned profile so a partial source can never look like reviewed complete guidance.
   return parseProfileCells(csv)
     .map((raw) => sanitizeProfile(raw))
-    .filter((p): p is SheetProfile => p !== null);
+    .filter((p): p is SanitizedSheetProfile => p !== null);
 }
 
 /**
@@ -305,7 +305,7 @@ export class SheetProfileStore {
   }
 
   /** Get cached profiles */
-  async getProfiles(): Promise<SheetProfile[]> {
+  async getProfiles(): Promise<SanitizedSheetProfile[]> {
     // An unconfigured store never serves sheet data, not even a cache a previously configured run
     // left on disk: opting out has to actually stop the stranger-written recipes from coming back.
     if (!this.isConfigured()) return [];
@@ -325,7 +325,25 @@ export class SheetProfileStore {
 
   private async readCache(): Promise<Cache | null> {
     try {
-      return JSON.parse(await readFile(this.cachePath, 'utf8')) as Cache;
+      const raw = JSON.parse(await readFile(this.cachePath, 'utf8')) as {
+        cachedAtMs?: unknown;
+        csvUrl?: unknown;
+        profiles?: unknown;
+      };
+      if (typeof raw.cachedAtMs !== 'number' || typeof raw.csvUrl !== 'string' || !Array.isArray(raw.profiles)) {
+        return null;
+      }
+
+      const profiles = raw.profiles
+        .map((entry) => {
+          if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null;
+          const { validation: _cachedValidation, ...fields } = entry as Record<string, unknown>;
+          if (!Object.values(fields).every((value) => typeof value === 'string')) return null;
+          return sanitizeProfile(fields as Record<string, string>);
+        })
+        .filter((profile): profile is SanitizedSheetProfile => profile !== null);
+
+      return { cachedAtMs: raw.cachedAtMs, csvUrl: raw.csvUrl, profiles };
     } catch {
       return null;
     }

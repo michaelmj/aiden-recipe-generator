@@ -133,11 +133,11 @@
       "bloomTemp": "96",
       "ssPulsesNumber": "7",
       "ssPulsesInterval": "20",
-      "ssPulseTemps": "96,96,95.5,95,94.5,94,93,93",
+      "ssPulseTemps": "96,96,95.5,95,94.5,94,93",
       "batchPulsesNumber": "7",
       "batchPulsesInterval": "20",
-      "batchPulseTemps": "96,96,95.5,95,94.5,94,93,93",
-      "notes": "Reviewed from the 2026-09-13 sheet snapshot. The sheet writes ratios as 1:N and temperatures in Fahrenheit with Celsius in parentheses; both are transcribed here from its Celsius figures. The sheet lists eight temperatures against seven pulses; both are kept as written."
+      "batchPulseTemps": "96,96,95.5,95,94.5,94,93",
+      "notes": "Reviewed from the 2026-09-13 sheet snapshot. The sheet writes ratios as 1:N and temperatures in Fahrenheit with Celsius in parentheses; both are transcribed here from its Celsius figures. The sheet lists eight temperatures against seven pulses; the duplicate final 93 C entry is omitted so each profile stays within the canonical Aiden write contract."
     },
     {
       "id": "la-cabra-kiamugumo",

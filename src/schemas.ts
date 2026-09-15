@@ -35,7 +35,7 @@ export const AIDEN_LIMITS = {
  * Titles are shown on the brewer's display and stored by Fellow, so the character set is held to
  * what the firmware accepts. This also keeps sheet-derived newlines and control characters out.
  */
-const TitleSchema = z
+export const AidenTitleSchema = z
   .string()
   .min(1)
   .max(AIDEN_LIMITS.title.max)
@@ -44,7 +44,7 @@ const TitleSchema = z
     'Titles may contain only letters, digits, spaces, and the specials !@#$%&*-+?/.,:)('
   );
 
-const TemperatureSchema = z
+export const AidenTemperatureSchema = z
   .number()
   .min(AIDEN_LIMITS.temperature.min)
   .max(AIDEN_LIMITS.temperature.max)
@@ -54,25 +54,37 @@ const TemperatureSchema = z
  * One temperature per pulse, so the array can never be longer than the pulse maximum.
  * An unbounded array would otherwise be forwarded verbatim to the device.
  */
-const PulseTemperaturesSchema = z.array(TemperatureSchema).max(AIDEN_LIMITS.pulsesNumber.max);
+export const AidenPulseTemperaturesSchema = z.array(AidenTemperatureSchema).max(AIDEN_LIMITS.pulsesNumber.max);
 
-const RatioSchema = z
+export const AidenRatioSchema = z
   .number()
   .min(AIDEN_LIMITS.ratio.min)
   .max(AIDEN_LIMITS.ratio.max)
   .multipleOf(AIDEN_LIMITS.ratio.step);
 
-const BloomRatioSchema = z
+export const AidenBloomRatioSchema = z
   .number()
   .min(AIDEN_LIMITS.bloomRatio.min)
   .max(AIDEN_LIMITS.bloomRatio.max)
   .multipleOf(AIDEN_LIMITS.bloomRatio.step);
 
-const BloomDurationSchema = z.number().int().min(AIDEN_LIMITS.bloomDuration.min).max(AIDEN_LIMITS.bloomDuration.max);
+export const AidenBloomDurationSchema = z
+  .number()
+  .int()
+  .min(AIDEN_LIMITS.bloomDuration.min)
+  .max(AIDEN_LIMITS.bloomDuration.max);
 
-const PulsesNumberSchema = z.number().int().min(AIDEN_LIMITS.pulsesNumber.min).max(AIDEN_LIMITS.pulsesNumber.max);
+export const AidenPulsesNumberSchema = z
+  .number()
+  .int()
+  .min(AIDEN_LIMITS.pulsesNumber.min)
+  .max(AIDEN_LIMITS.pulsesNumber.max);
 
-const PulsesIntervalSchema = z.number().int().min(AIDEN_LIMITS.pulsesInterval.min).max(AIDEN_LIMITS.pulsesInterval.max);
+export const AidenPulsesIntervalSchema = z
+  .number()
+  .int()
+  .min(AIDEN_LIMITS.pulsesInterval.min)
+  .max(AIDEN_LIMITS.pulsesInterval.max);
 
 /**
  * A pulse temperature list longer than the pulse count would leave the device with instructions it
@@ -104,21 +116,21 @@ export const AidenCreateProfileSchema = z
      * (aiden-recipe-generator-iaf).
      */
     profileType: z.literal(0).default(0),
-    title: TitleSchema,
-    overallTemperature: TemperatureSchema.optional().nullable(),
-    ratio: RatioSchema,
+    title: AidenTitleSchema,
+    overallTemperature: AidenTemperatureSchema.optional().nullable(),
+    ratio: AidenRatioSchema,
     bloomEnabled: z.boolean(),
-    bloomRatio: BloomRatioSchema,
-    bloomDuration: BloomDurationSchema,
-    bloomTemperature: TemperatureSchema,
+    bloomRatio: AidenBloomRatioSchema,
+    bloomDuration: AidenBloomDurationSchema,
+    bloomTemperature: AidenTemperatureSchema,
     ssPulsesEnabled: z.boolean(),
-    ssPulsesNumber: PulsesNumberSchema,
-    ssPulsesInterval: PulsesIntervalSchema,
-    ssPulseTemperatures: PulseTemperaturesSchema.default([]),
+    ssPulsesNumber: AidenPulsesNumberSchema,
+    ssPulsesInterval: AidenPulsesIntervalSchema,
+    ssPulseTemperatures: AidenPulseTemperaturesSchema.default([]),
     batchPulsesEnabled: z.boolean(),
-    batchPulsesNumber: PulsesNumberSchema,
-    batchPulsesInterval: PulsesIntervalSchema.default(30),
-    batchPulseTemperatures: PulseTemperaturesSchema.default([])
+    batchPulsesNumber: AidenPulsesNumberSchema,
+    batchPulsesInterval: AidenPulsesIntervalSchema.default(30),
+    batchPulseTemperatures: AidenPulseTemperaturesSchema.default([])
   })
   .superRefine((profile, ctx) => {
     checkPulseTemperatureCount(ctx, 'ssPulseTemperatures', profile.ssPulseTemperatures, profile.ssPulsesNumber);
@@ -138,21 +150,21 @@ export const AidenUpdateProfileSchema = z
     // profileType and duration are absent on purpose: the first is fixed at creation (see the
     // create schema) and the second is server-derived. A patch naming either is rejected rather
     // than silently stripped, so a model sending one hears about it.
-    title: TitleSchema.optional(),
-    ratio: RatioSchema.optional(),
+    title: AidenTitleSchema.optional(),
+    ratio: AidenRatioSchema.optional(),
     bloomEnabled: z.boolean().optional(),
-    overallTemperature: TemperatureSchema.optional().nullable(),
-    bloomRatio: BloomRatioSchema.optional(),
-    bloomDuration: BloomDurationSchema.optional(),
-    bloomTemperature: TemperatureSchema.optional(),
+    overallTemperature: AidenTemperatureSchema.optional().nullable(),
+    bloomRatio: AidenBloomRatioSchema.optional(),
+    bloomDuration: AidenBloomDurationSchema.optional(),
+    bloomTemperature: AidenTemperatureSchema.optional(),
     ssPulsesEnabled: z.boolean().optional(),
-    ssPulsesNumber: PulsesNumberSchema.optional(),
-    ssPulsesInterval: PulsesIntervalSchema.optional(),
-    ssPulseTemperatures: PulseTemperaturesSchema.nullable().optional(),
+    ssPulsesNumber: AidenPulsesNumberSchema.optional(),
+    ssPulsesInterval: AidenPulsesIntervalSchema.optional(),
+    ssPulseTemperatures: AidenPulseTemperaturesSchema.nullable().optional(),
     batchPulsesEnabled: z.boolean().optional(),
-    batchPulsesNumber: PulsesNumberSchema.optional(),
-    batchPulsesInterval: PulsesIntervalSchema.nullable().optional(),
-    batchPulseTemperatures: PulseTemperaturesSchema.nullable().optional()
+    batchPulsesNumber: AidenPulsesNumberSchema.optional(),
+    batchPulsesInterval: AidenPulsesIntervalSchema.nullable().optional(),
+    batchPulseTemperatures: AidenPulseTemperaturesSchema.nullable().optional()
   })
   .superRefine((patch, ctx) => {
     // Every field is optional, so {} parses. Letting it through spends an authenticated write on

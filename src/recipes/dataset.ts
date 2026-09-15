@@ -11,8 +11,7 @@
 
 import { readFile } from 'node:fs/promises';
 import * as z from 'zod/v4';
-import { sanitizeProfile } from '@/sheet/sanitize';
-import type { SheetProfile } from '@/sheet/store';
+import { type SanitizedSheetProfile, sanitizeProfile } from '@/sheet/sanitize';
 import { sanitizeText, TEXT_MAX_CHARS } from '@/text';
 
 /** Where a record came from, which is what its trust level rests on. */
@@ -29,7 +28,7 @@ export type RecipeSource = {
 };
 
 /** One recipe: the same brewing fields the sheet path produces, plus an id and its provenance. */
-export type Recipe = SheetProfile & {
+export type Recipe = SanitizedSheetProfile & {
   id: string;
   source: RecipeSource;
   /** Free text from whoever recorded the recipe — tasting result, grinder setting, caveats. */
@@ -123,7 +122,7 @@ function toRecipe(raw: unknown): Recipe | null {
   // Same sanitizer as the sheet cells: length caps, escapes and invisible characters stripped,
   // brewing values range-checked. A record whose title does not survive is dropped whole.
   const profile = sanitizeProfile(brewing as Record<string, string>);
-  if (!profile) return null;
+  if (!profile || profile.validation.status === 'invalid') return null;
 
   const recipe: Recipe = {
     ...profile,

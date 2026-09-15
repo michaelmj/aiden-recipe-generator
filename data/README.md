@@ -5,7 +5,10 @@ it makes no network call and involves no third party — unlike the public commu
 stranger can edit and which is now opt-in (`AIDEN_AI_SHEET_CSV_URL`).
 
 Loading it is still not the same as trusting it: `src/recipes/dataset.ts` validates every record and
-runs it through the same sanitizer the sheet cells go through, and drops anything that fails.
+runs it through the same canonical profile validator the sheet cells and Fellow writes use. A
+bundled record with an invalid brewing field is dropped instead of being served as trusted partial
+guidance. A structurally valid but incomplete record remains searchable with an explicit
+`validation.status` of `incomplete` and a `missingFields` list.
 
 ## Format
 
@@ -37,8 +40,11 @@ runs it through the same sanitizer the sheet cells go through, and drops anythin
 }
 ```
 
-Only `id`, `source` and `title` are required. Brewing values are strings because they go through the
-same range checks as sheet cells, which parse them; a value outside what an Aiden can do is dropped.
+Only `id`, `source` and `title` are required by the storage format. Brewing values are strings, then
+parsed through the same exported Zod field schemas used by `AidenCreateProfileSchema`. Limits,
+integer rules, half-degree steps, and pulse-count/list relationships therefore cannot drift between
+recipe sources and device writes. `toAidenCreateProfile` converts a `complete` record into a fully
+validated write payload; it returns the missing fields or validation issues for any other record.
 
 ### `source.kind`
 

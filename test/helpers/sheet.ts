@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { RecipeDataset } from '@/recipes/dataset';
-import type { SheetProfile } from '@/sheet/store';
+import type { SanitizedSheetProfile } from '@/sheet/sanitize';
 import { SheetProfileStore } from '@/sheet/store';
 import { registerSheetTools } from '@/tools/sheet';
 import { csvResponse, freshDataDir, respondWith, withFetch } from './offline';
@@ -41,7 +41,7 @@ export function datasetOf(recipes: unknown[] = []): RecipeDataset {
  * Sync one CSV body through a fresh store and return the profiles it was willing to keep.
  * Rejects when the sync does, so a test can assert either the kept rows or the refusal.
  */
-export async function profilesFromCsv(csv: string, contentType = 'text/csv'): Promise<SheetProfile[]> {
+export async function profilesFromCsv(csv: string, contentType = 'text/csv'): Promise<SanitizedSheetProfile[]> {
   const store = freshStore();
   return withFetch(
     respondWith(() => csvResponse(csv, contentType)),

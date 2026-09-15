@@ -11,6 +11,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as z from 'zod/v4';
 import type { Recipe, RecipeDataset, SearchQuery } from '@/recipes/dataset';
+import type { SanitizedSheetProfile } from '@/sheet/sanitize';
 import type { SheetProfile, SheetProfileStore } from '@/sheet/store';
 import { toolResponse } from '@/tools/response';
 import {
@@ -36,7 +37,18 @@ const SheetProfileSchema = z.object({
   ssPulseTemps: z.string().optional(),
   batchPulsesNumber: z.string().optional(),
   batchPulsesInterval: z.string().optional(),
-  batchPulseTemps: z.string().optional()
+  batchPulseTemps: z.string().optional(),
+  validation: z.object({
+    status: z.enum(['complete', 'incomplete', 'invalid']),
+    missingFields: z.array(z.string()),
+    issues: z.array(
+      z.object({
+        field: z.string(),
+        code: z.enum(['invalid', 'conflict']),
+        message: z.string()
+      })
+    )
+  })
 });
 
 /**
@@ -71,7 +83,7 @@ function bundledRecord(recipe: Recipe): RecipeRecord {
   return { ...profile, id, source, ...(notes ? { notes } : {}), trust: BUNDLED_DATASET_TRUST_LABEL };
 }
 
-function sheetRecord(profile: SheetProfile): RecipeRecord {
+function sheetRecord(profile: SanitizedSheetProfile): RecipeRecord {
   return { ...profile, trust: UNTRUSTED_SHEET_TRUST_LABEL };
 }
 

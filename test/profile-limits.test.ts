@@ -68,6 +68,31 @@ describe('AidenCreateProfileSchema', () => {
       ssPulseTemperatures: [96, 95, 94]
     });
     expect(result.success).toBe(false);
+    expect(
+      AidenCreateProfileSchema.safeParse({
+        ...realProfile,
+        batchPulsesNumber: 1,
+        batchPulseTemperatures: [96, 95]
+      }).success
+    ).toBe(false);
+  });
+
+  test('requires every enabled flag and its canonical source settings', () => {
+    for (const field of [
+      'bloomEnabled',
+      'bloomRatio',
+      'bloomDuration',
+      'bloomTemperature',
+      'ssPulsesEnabled',
+      'ssPulsesNumber',
+      'ssPulsesInterval',
+      'batchPulsesEnabled',
+      'batchPulsesNumber'
+    ] as const) {
+      const missing = { ...realProfile };
+      delete missing[field];
+      expect(AidenCreateProfileSchema.safeParse(missing).success, field).toBe(false);
+    }
   });
 
   test('rejects out-of-range pulse counts, intervals, and bloom values', () => {

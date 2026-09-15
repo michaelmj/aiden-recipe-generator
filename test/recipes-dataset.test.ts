@@ -11,7 +11,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { BUNDLED_DATASET_PATH, RecipeDataset } from '@/recipes/dataset';
-import { AidenCreateProfileSchema } from '@/schemas';
+import { toAidenCreateProfile } from '@/sheet/sanitize';
 import { blockedNetworkCalls, clearBlockedNetworkCalls } from './helpers/offline';
 
 const ESC = String.fromCharCode(27);
@@ -81,26 +81,11 @@ describe('loading', () => {
     for (const recipe of own) expect(recipe.source.credit).toBeUndefined();
   });
 
-  test('every bundled title is one the brewer would accept', async () => {
-    // A recipe the agent cannot push is a recipe that only looks usable: TitleSchema rejects
-    // characters the firmware does not take, so a title with a tilde or an em dash fails at the
-    // write, long after the dataset said it was fine.
+  test('every bundled recipe is complete and converts through the canonical write contract', async () => {
     const dataset = new RecipeDataset({ path: BUNDLED_DATASET_PATH });
     for (const recipe of await dataset.list()) {
-      const parsed = AidenCreateProfileSchema.safeParse({
-        title: recipe.title.slice(0, 50),
-        ratio: 16,
-        bloomEnabled: true,
-        bloomRatio: 2,
-        bloomDuration: 45,
-        bloomTemperature: 96,
-        ssPulsesEnabled: true,
-        ssPulsesNumber: 3,
-        ssPulsesInterval: 23,
-        batchPulsesEnabled: true,
-        batchPulsesNumber: 1
-      });
-      expect(parsed.success, `${recipe.id}: ${recipe.title}`).toBe(true);
+      expect(recipe.validation.status, recipe.id).toBe('complete');
+      expect(toAidenCreateProfile(recipe).success, recipe.id).toBe(true);
     }
   });
 
@@ -183,14 +168,17 @@ describe('records are sanitized, not trusted for being local', () => {
     expect(recipe?.notes).toContain('Tasted sweet');
   });
 
-  test('brewing values outside what an Aiden can do are dropped from the record', async () => {
+  test('a bundled record with invalid brewing values is rejected, not served as trusted partial data', async () => {
     const dataset = datasetOf(fileWith({ ...GUJI, bloomTemp: '250', brewRatio: '999', ssPulsesNumber: '3' }));
 
-    const [recipe] = await dataset.list();
-    // The record survives on its title, but the impossible values do not reach the agent.
-    expect(recipe?.bloomTemp).toBeUndefined();
-    expect(recipe?.brewRatio).toBeUndefined();
-    expect(recipe?.ssPulsesNumber).toBe('3');
+    expect(await dataset.load()).toEqual({ kept: 0, dropped: 1 });
+    expect(await dataset.list()).toEqual([]);
+  });
+
+  test('an incomplete bundled record survives with an explicit incomplete classification', async () => {
+    const [recipe] = await datasetOf(fileWith(GUJI)).list();
+    expect(recipe?.validation.status).toBe('incomplete');
+    expect(recipe?.validation.missingFields).toContain('bloomRatio');
   });
 
   test('provenance comes back with the record', async () => {
