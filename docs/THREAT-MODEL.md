@@ -17,6 +17,20 @@ it is no longer the default recipe source.
 | The physical brewer | `aiden.createProfile` / `aiden.updateProfile` | Heats water; parameters come from the agent |
 | Local brew history / settings | `~/.aiden-ai-profile-generator/*.json` (`src/storage/`) | Low value, but a persistence foothold |
 
+## Credential entry boundary
+
+The default MCP surface never accepts a Fellow password. Authentication is bootstrapped out of band
+with `bun run auth:login` in the operator's local TTY; terminal echo is disabled while the password
+is read, and the secret is sent only in the Fellow HTTPS request body. It is never placed in argv or
+printed. The terminal process and Fellow receive the password; the MCP host, model provider, tool
+transcript, and MCP telemetry do not.
+
+The legacy `auth.login` MCP tool is absent unless the operator explicitly starts the server with
+`AIDEN_AI_ENABLE_INSECURE_MCP_LOGIN=1`. That compatibility mode exposes the password to the MCP host
+and potentially transcripts, telemetry, screenshots, and exports; the flag is a warning and opt-in,
+not a security boundary after the tool is enabled. `auth.status`, refresh, and `auth.logout` continue
+to use the locally stored session without handling the password.
+
 ## Recipe sources and what each is worth
 
 Three things can supply a recipe, and the default is now the one nobody else can write:

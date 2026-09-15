@@ -11,6 +11,7 @@
   "scripts": {
     "dev": "bun --watch src/index.ts",
     "start": "bun dist/index.js",
+    "auth:login": "bun src/cli/login.ts",
     "build": "bunx tsc -p tsconfig.json",
     "typecheck": "bunx tsc -p tsconfig.json --noEmit && bunx tsc -p tsconfig.test.json",
     "lint": "biome lint src test scripts",

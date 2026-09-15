@@ -63,6 +63,10 @@ bun install --frozen-lockfile --ignore-scripts
 
 # Add to Claude Code
 claude mcp add aiden bun run /path-to-this-repo/src/index.ts
+
+# In a separate local terminal, authenticate without exposing your password to MCP/the model
+cd /path-to-this-repo
+bun run auth:login
 ```
 
 Dependencies are treated as attack surface — see [CONTRIBUTING.md](CONTRIBUTING.md#install-policy)
@@ -73,7 +77,6 @@ and [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) for the current audit of the tr
 
 | Tool | Description |
 |------|-------------|
-| `auth.login` | Login to Fellow and store the session locally (keychain when available) |
 | `auth.status` | Check whether a Fellow session is stored |
 | `auth.logout` | Clear the stored Fellow session |
 | `aiden.listDevices` | List connected Aiden brewers |
@@ -92,6 +95,13 @@ and [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) for the current audit of the tr
 | `storage.findSimilar` | Find past brews with similar coffee characteristics |
 | `user.getSettings` | Get saved preferences (grinder, default device) |
 | `user.updateSettings` | Save preferences (grinder, device, etc.) |
+
+`auth.login` is disabled by default because its password argument is visible to the MCP host and may
+enter model transcripts, telemetry, screenshots, or exports. The supported login path is the local
+`bun run auth:login` command above: it requires a TTY, reads the password with echo disabled, passes
+it to Fellow only in the HTTPS request body, and stores only the resulting session. The shell argv
+and command output contain no password. For legacy compatibility only, an operator can expose the
+unsafe tool by starting the server with `AIDEN_AI_ENABLE_INSECURE_MCP_LOGIN=1`.
 
 The `sheet.*` names are historical: they read the bundled dataset first and only touch a live sheet
 when one is configured. See [Recipe sources](#recipe-sources).

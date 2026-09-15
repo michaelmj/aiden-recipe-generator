@@ -185,7 +185,7 @@ const seg = (value: string) => encodeURIComponent(value);
 function upstreamError(label: string, status: number): Error {
   const hint =
     status === 401 || status === 403
-      ? 'not authorized; call auth.login again'
+      ? 'not authorized; run `bun run auth:login` again'
       : status === 404
         ? 'not found'
         : status === 429
@@ -257,7 +257,7 @@ export class FellowClient {
 
   private async getToken(): Promise<string> {
     const session = await this.store.read();
-    if (!session?.accessToken) throw new Error('Not logged in. Call auth.login first.');
+    if (!session?.accessToken) throw new Error('Not logged in. Run `bun run auth:login` in a local terminal first.');
 
     // Check if token is expired or about to expire (30s buffer)
     const isExpired = session.accessTokenExpMs && Date.now() > session.accessTokenExpMs - 30_000;
@@ -267,12 +267,12 @@ export class FellowClient {
       try {
         return await this.refreshSession(session);
       } catch {
-        throw new Error('Session expired and refresh failed. Please auth.login again.');
+        throw new Error('Session expired and refresh failed. Run `bun run auth:login` again.');
       }
     }
 
     if (isExpired) {
-      throw new Error('Access token expired. Please auth.login again.');
+      throw new Error('Access token expired. Run `bun run auth:login` again.');
     }
 
     return session.accessToken;

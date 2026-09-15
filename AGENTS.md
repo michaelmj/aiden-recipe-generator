@@ -30,7 +30,7 @@ When the user asks to brew coffee or shows a coffee bag photo:
 - `storage.findSimilar` - Past brews with similar characteristics
 
 **Auth & Device:**
-- `auth.status` / `auth.login` - Login to Fellow
+- `auth.status` - Check Fellow login; if needed, ask the user to run `bun run auth:login` locally
 - `aiden.listDevices` - Get connected Aidens
 - `aiden.listProfiles` - Profiles on device
 - `aiden.createProfile` / `aiden.updateProfile` - Create/modify profiles
