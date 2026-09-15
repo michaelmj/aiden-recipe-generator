@@ -21,9 +21,11 @@ const SESSION: Session = {
 };
 
 const tempDataDir = freshDataDir;
+const SUITE_KEYCHAIN_SETTING = process.env.AIDEN_AI_DISABLE_KEYCHAIN;
 
 afterEach(() => {
-  delete process.env.AIDEN_AI_DISABLE_KEYCHAIN;
+  if (SUITE_KEYCHAIN_SETTING === undefined) delete process.env.AIDEN_AI_DISABLE_KEYCHAIN;
+  else process.env.AIDEN_AI_DISABLE_KEYCHAIN = SUITE_KEYCHAIN_SETTING;
   delete process.env.AIDEN_AI_ALLOW_PLAINTEXT_SESSION;
 });
 

@@ -138,8 +138,10 @@ file but not the keychain gets ciphertext — strictly better than before.
 **Migration.** A pre-existing plaintext `session.json` is read once, re-written encrypted, and
 deleted. No re-authentication needed.
 
-**Tests.** `test/keychain.test.ts`. The round-trip cases touch the real login keychain and can raise
-an OS access dialog, so they are opt-in: `AIDEN_TEST_KEYCHAIN=1 bun test`.
+**Tests.** The suite preload sets `AIDEN_AI_DISABLE_KEYCHAIN=1` before test modules load, so an
+ordinary `bun test` never probes or invokes `security` or `secret-tool`. The preload skips that
+isolation only for explicit integration runs. Round-trip cases touch the real login keychain and can
+raise an OS access dialog, so they remain opt-in: `AIDEN_TEST_KEYCHAIN=1 bun test test/keychain.test.ts`.
 
 ## Install policy (2026-09-13, `nh5.13`)
 

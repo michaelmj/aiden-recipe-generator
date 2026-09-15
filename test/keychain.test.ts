@@ -14,9 +14,10 @@ const ACCOUNT = `keychain-test-${process.pid}`;
 const LIVE = process.env.AIDEN_TEST_KEYCHAIN === '1';
 
 describe('getKeychain', () => {
-  test('resolves a backend on macOS and caches it', async () => {
+  test('ordinary tests disable credential helpers; live tests resolve and cache them', async () => {
     const keychain = await getKeychain();
-    if (process.platform === 'darwin') expect(keychain).not.toBeNull();
+    if (!LIVE) expect(keychain).toBeNull();
+    else if (process.platform === 'darwin') expect(keychain).not.toBeNull();
     expect(await getKeychain()).toBe(keychain);
   });
 });

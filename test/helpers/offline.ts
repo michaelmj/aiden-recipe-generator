@@ -12,6 +12,10 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+// Ordinary tests must never probe or invoke the operator's credential helper. The explicit
+// integration-test opt-in is evaluated by Bun before this preload runs.
+if (process.env.AIDEN_TEST_KEYCHAIN !== '1') process.env.AIDEN_AI_DISABLE_KEYCHAIN = '1';
+
 /** Whatever `new Response(...)` accepts as a body — `BodyInit` is not a global under tsc here. */
 export type ResponseBody = ConstructorParameters<typeof Response>[0];
 
