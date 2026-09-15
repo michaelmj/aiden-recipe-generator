@@ -17,6 +17,9 @@ it is no longer the default recipe source.
 | The physical brewer | `aiden.createProfile` / `aiden.updateProfile` | Heats water; parameters come from the agent |
 | Local brew history / settings | `~/.aiden-ai-profile-generator/*.json` (`src/storage/`) | Low value, but a persistence foothold |
 
+Local-store runtime validation, size limits, text neutralization, serialized atomic writes,
+quarantine behavior, and file permissions are specified in [LOCAL-STORAGE.md](LOCAL-STORAGE.md).
+
 ## Credential entry boundary
 
 The default MCP surface never accepts a Fellow password. Authentication is bootstrapped out of band
