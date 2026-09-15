@@ -3,6 +3,7 @@
 import { createInterface } from 'node:readline/promises';
 import { pathToFileURL } from 'node:url';
 import { FellowClient } from '@/fellow/client';
+import { resolveLoginTimezone } from '@/fellow/timezone';
 
 export async function readHiddenPassword(
   input: NodeJS.ReadStream = process.stdin,
@@ -53,8 +54,7 @@ export async function loginInteractively(client = new FellowClient()): Promise<v
 
   const password = await readHiddenPassword();
   if (!password) throw new Error('Password is required.');
-  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  if (!timezone) throw new Error('Could not determine the local IANA timezone.');
+  const timezone = resolveLoginTimezone(process.env.AIDEN_AI_LOGIN_TIMEZONE);
 
   const result = await client.login({ email, password, timezone });
   process.stdout.write(`Logged in as ${result.email}. You can now use auth.status through MCP.\n`);

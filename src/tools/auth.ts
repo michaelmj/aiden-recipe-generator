@@ -1,6 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as z from 'zod/v4';
 import type { FellowClient } from '@/fellow/client';
+import { isValidTimezone, resolveLoginTimezone } from '@/fellow/timezone';
 import { toolResponse } from '@/tools/response';
 
 export const INSECURE_MCP_LOGIN_ENV = 'AIDEN_AI_ENABLE_INSECURE_MCP_LOGIN';
@@ -20,14 +21,19 @@ export function registerAuthTools(server: McpServer, fellow: FellowClient) {
         inputSchema: {
           email: z.string().email(),
           password: z.string().min(1),
-          timezone: z.string().default('Europe/Prague')
+          timezone: z
+            .string()
+            .refine(isValidTimezone, { message: 'timezone must be an IANA zone name such as America/Detroit.' })
+            .optional()
+            .describe('IANA zone name. Defaults to the timezone of the machine running this server.')
         },
         outputSchema: {
           ok: z.boolean(),
           email: z.string()
         }
       },
-      async ({ email, password, timezone }) => toolResponse(await fellow.login({ email, password, timezone }))
+      async ({ email, password, timezone }) =>
+        toolResponse(await fellow.login({ email, password, timezone: resolveLoginTimezone(timezone) }))
     );
   }
 

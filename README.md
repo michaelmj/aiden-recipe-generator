@@ -107,6 +107,13 @@ it to Fellow only in the HTTPS request body, and stores only the resulting sessi
 and command output contain no password. For legacy compatibility only, an operator can expose the
 unsafe tool by starting the server with `AIDEN_AI_ENABLE_INSECURE_MCP_LOGIN=1`.
 
+Fellow's login request carries an IANA timezone. Both login paths send the timezone of the machine
+they run on (`Intl.DateTimeFormat().resolvedOptions().timeZone`) — there is no fixed regional
+default. Override it with `AIDEN_AI_LOGIN_TIMEZONE=America/Detroit` for `bun run auth:login`, or with
+the `timezone` argument of `auth.login`. A value that is not an IANA zone name is rejected, and if
+the host cannot report its own zone the login fails asking for an explicit one rather than guessing a
+region.
+
 The `sheet.*` names are historical: they read the bundled dataset first and only touch a live sheet
 when one is configured. See [Recipe sources](#recipe-sources).
 

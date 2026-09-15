@@ -34,6 +34,11 @@ and potentially transcripts, telemetry, screenshots, and exports; the flag is a 
 not a security boundary after the tool is enabled. `auth.status`, refresh, and `auth.logout` continue
 to use the locally stored session without handling the password.
 
+The login body also carries an IANA timezone, which tells Fellow where the account is being used
+from. It is taken from the host running the login (`AIDEN_AI_LOGIN_TIMEZONE` or the `timezone`
+argument override it) and validated as a zone name. There is no fixed regional default: an
+unresolvable host zone fails the login rather than reporting an unrelated region to Fellow.
+
 ## Recipe sources and what each is worth
 
 Three things can supply a recipe, and the default is now the one nobody else can write:
