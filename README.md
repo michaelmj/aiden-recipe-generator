@@ -52,26 +52,140 @@ So I reverse-engineered the API requests the Fellow mobile app sends to the mach
 - **Memory** - Logs brews and feedback to learn from past attempts
 - **User settings** - Remembers your grinder etc.
 
-## Setup
+## Getting started
+
+### 1. Prerequisites
+
+- **[Bun](https://bun.sh) 1.4 or newer** (`bun --version`) — the server runs as TypeScript, there is
+  no build step for normal use.
+- **macOS or Linux.** The session is encrypted under a key in the OS keychain: macOS uses the
+  built-in `security`, Linux uses `secret-tool` (`libsecret-tools`). Elsewhere, see
+  [Storage and environment](#storage-and-environment) before logging in.
+- **A Fellow account** with an Aiden already set up and on Wi-Fi in the Fellow mobile app. This
+  server talks to Fellow's cloud API, not to the brewer directly.
+- **An MCP client** — Claude Code, Claude Desktop, Cursor, or anything else that speaks MCP.
+
+### 2. Install
 
 ```bash
-# Clone this repo
 git clone https://github.com/michaelmj/aiden-recipe-generator.git
+cd aiden-recipe-generator
 
-# Install dependencies (lockfile is authoritative; no dependency runs install scripts)
+# The lockfile is authoritative and no dependency is allowed to run install scripts
 bun install --frozen-lockfile --ignore-scripts
-
-# Add to Claude Code
-claude mcp add aiden bun run /path-to-this-repo/src/index.ts
-
-# In a separate local terminal, authenticate without exposing your password to MCP/the model
-cd /path-to-this-repo
-bun run auth:login
 ```
 
 Dependencies are treated as attack surface — see [CONTRIBUTING.md](CONTRIBUTING.md#install-policy)
 for the install policy (no lifecycle scripts, exact pins, reviewed lockfile, advisory audit in CI)
 and [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) for the current audit of the tree.
+
+### 3. Log in to Fellow
+
+Do this in your own terminal, before wiring up any MCP client:
+
+```bash
+bun run auth:login
+```
+
+It prompts for your Fellow email and password. The password is read from the TTY with echo
+disabled, sent only in the Fellow HTTPS request body, and never written to argv, output, or disk —
+only the resulting session is stored. Your MCP client and the model never see it. Log in once; the
+session is reused until you run `auth.logout`.
+
+### 4. Connect your MCP client
+
+**Claude Code** — the `--` matters, everything after it is the command to run:
+
+```bash
+claude mcp add aiden -- bun run /absolute/path/to/aiden-recipe-generator/src/index.ts
+```
+
+Add `-s user` to make it available in every project instead of just the current one. Restart
+Claude Code, then `claude mcp list` should show `aiden` connected.
+
+**Claude Desktop, Cursor, or any client with a JSON config** — add a stdio server. Claude Desktop
+reads `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) and Cursor reads
+`~/.cursor/mcp.json` or `.cursor/mcp.json` in a project:
+
+```json
+{
+  "mcpServers": {
+    "aiden": {
+      "command": "bun",
+      "args": ["run", "/absolute/path/to/aiden-recipe-generator/src/index.ts"]
+    }
+  }
+}
+```
+
+Use an absolute path to `bun` (`which bun`, often `/opt/homebrew/bin/bun`) if the client starts
+with a minimal `PATH` and reports that the command was not found. Environment overrides from
+[Storage and environment](#storage-and-environment) go in an `"env": { ... }` object here, or after
+`-e` on the `claude mcp add` line.
+
+### 5. Verify it works
+
+Ask your client something that needs the server, for example *"list my Aiden devices"*, and it
+should call `aiden.listDevices` and name your brewer. To check the server itself without a client,
+speak MCP to it directly:
+
+```bash
+printf '%s\n' \
+  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"probe","version":"0"}}}' \
+  '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+  '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"auth.status","arguments":{}}}' \
+  | bun run src/index.ts
+```
+
+It prints `aiden-ai-profile-generator running (stdio)` plus the bundled recipe count on stderr, and
+a JSON response with `"loggedIn": true` once step 3 succeeded. The process stays attached to stdio —
+press Ctrl-C to exit.
+
+### 6. First brew
+
+Show your client a photo of a coffee bag, or just name the coffee, and ask it to build a recipe.
+It follows the workflow in [AGENTS.md](AGENTS.md): research first, then a profile. Profile writes
+are not silent — a recipe is proposed, previewed against a specific device, and only written after
+you approve that exact preview (see [docs/RECIPE-PROPOSALS.md](docs/RECIPE-PROPOSALS.md)). Then
+press the button on the machine: the Fellow API has no remote start (see [Limitations](#limitations)).
+
+After tasting, tell it what you thought — feedback is logged and used to rank future recipes.
+
+### Storage and environment
+
+Everything local lives in `~/.aiden-ai-profile-generator`: the encrypted session
+(`session.enc.json`), brew log, user settings, cached sheet profiles, and pending proposal
+approvals. Details in [docs/LOCAL-STORAGE.md](docs/LOCAL-STORAGE.md).
+
+| Variable | Effect |
+|---|---|
+| `AIDEN_AI_DATA_DIR` | Move that directory somewhere else |
+| `AIDEN_AI_LOGIN_TIMEZONE` | Send an explicit IANA zone at login instead of the host's |
+| `AIDEN_AI_SHEET_CSV_URL` | Opt into a live community sheet (see [Recipe sources](#recipe-sources)) |
+| `AIDEN_AI_SHEET_ALLOWED_HOSTS` | Allow sheet hosts other than `docs.google.com` |
+| `AIDEN_AI_DISABLE_KEYCHAIN=1` | Skip the OS keychain |
+| `AIDEN_AI_ALLOW_PLAINTEXT_SESSION=1` | Permit a `0600` plaintext session file when no keychain is available — tokens on disk in the clear, so it warns on every write |
+| `AIDEN_AI_ENABLE_INSECURE_MCP_LOGIN=1` | Expose the legacy `auth.login` tool; see [Tools](#tools) |
+
+Without a keychain backend, login fails rather than quietly writing credentials in plaintext. That
+is deliberate: install `secret-tool` on Linux if you can, and reach for
+`AIDEN_AI_ALLOW_PLAINTEXT_SESSION` only when you understand that your Fellow access and refresh
+tokens end up readable in a file.
+
+### Troubleshooting
+
+| Symptom | Cause |
+|---|---|
+| Client shows the server as failed or disconnected | `bun` not on the client's `PATH`, or a relative path in the config — use absolute paths for both |
+| `auth.status` reports `loggedIn: false` | `bun run auth:login` has not run, or it ran with a different `AIDEN_AI_DATA_DIR` than the server sees |
+| `A local interactive TTY is required` | `auth:login` was piped or run inside an agent session; run it in a real terminal |
+| `Login failed (401)` | Wrong email or password — the same credentials as the Fellow mobile app |
+| `Could not determine the local IANA timezone` | Set `AIDEN_AI_LOGIN_TIMEZONE`, e.g. `America/Detroit` |
+| No devices listed after a successful login | The Aiden is not registered to that Fellow account, or is offline in the mobile app |
+| `Failed to load community sheet` on startup | Only possible when `AIDEN_AI_SHEET_CSV_URL` is set; it is a warning, the bundled dataset still loads |
+
+Run `bun test` and `bun run typecheck` to confirm a clean checkout before reporting a bug.
+
 
 ## Tools
 
