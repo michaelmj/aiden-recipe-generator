@@ -85,6 +85,10 @@ and [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) for the current audit of the tr
 | `aiden.createProfile` | Create a new brew profile |
 | `aiden.updateProfile` | Update an existing Custom profile |
 | `aiden.deleteProfile` | Delete an existing Custom profile |
+| `recipe.validateProposal` | Validate local proposal JSON and compute its content hash |
+| `recipe.previewProposal` | Preview exact device and profile changes before a write |
+| `recipe.applyProposal` | Apply one reviewed, hash-bound proposal |
+| `recipe.cancelProposalReview` | Cancel a pending local proposal review |
 | `sheet.search` | Search recipes by origin/roast/processing (bundled dataset, plus the opt-in sheet) |
 | `sheet.list` | List every known recipe from both sources |
 | `sheet.sync` | Refresh the cached community sheet — a no-op unless an operator opted in |

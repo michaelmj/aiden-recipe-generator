@@ -60,3 +60,17 @@ reviewer sees.
 Source records have their own `complete`, `incomplete`, or `invalid` classification. Only a complete
 source can convert directly through `toAidenCreateProfile`; incomplete fields and invalid/conflicting
 values remain explicit evidence warnings when building a proposal.
+
+## Review and apply workflow
+
+Use `recipe.validateProposal` to validate local proposal JSON and compute its canonical SHA-256
+content hash. Use `recipe.previewProposal` with the exact `deviceId` to create a short-lived local
+review approval and display the device, title, every writable profile parameter, evidence quality,
+assumptions, warnings, conflicts, and evidence gaps. This phase never calls Fellow's write API.
+
+After the operator reviews that preview, call `recipe.applyProposal` with the same proposal,
+`deviceId`, and returned `approvalId`. The local approval stores the proposal hash and device id;
+changed parameters, a different device, expired approvals, cancelled approvals, and replayed
+approvals are rejected. The approval is reserved before the single bounded `createProfile` call,
+so one approval cannot cause duplicate writes. Call `recipe.cancelProposalReview` to cancel without
+contacting Fellow.

@@ -15,6 +15,7 @@ import { SheetProfileStore } from '@/sheet/store';
 import { registerAuthTools } from '@/tools/auth';
 import { registerDeviceTools } from '@/tools/device';
 import { registerProfileTools } from '@/tools/profile';
+import { registerRecipeTools } from '@/tools/recipe';
 import { registerSheetTools } from '@/tools/sheet';
 import { registerStorageTools } from '@/tools/storage';
 
@@ -27,6 +28,7 @@ const sheetStore = new SheetProfileStore();
 registerAuthTools(server, fellow);
 registerDeviceTools(server, fellow);
 registerProfileTools(server, fellow);
+registerRecipeTools(server, fellow);
 registerSheetTools(server, dataset, sheetStore);
 registerStorageTools(server);
 registerPrompts(server);
