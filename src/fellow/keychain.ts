@@ -173,8 +173,22 @@ const secretToolKeychain: Keychain = {
 /** Cached backend: `null` once we know this platform has none. */
 let cache: Keychain | null | undefined;
 
+/**
+ * Test seam: a backend supplied by a test, which wins over probing and over the disable env var.
+ * The encrypted-session path is only reachable with a keychain, and the test suite must never touch
+ * the operator's real one, so tests install an in-memory stand-in here.
+ */
+let override: Keychain | null | undefined;
+
+/** Install (or with `undefined`, remove) the test backend. */
+export function setKeychainForTests(keychain: Keychain | null | undefined): void {
+  override = keychain;
+}
+
 /** Resolve the OS keychain backend, or null when this platform has no usable one. */
 export async function getKeychain(): Promise<Keychain | null> {
+  if (override !== undefined) return override;
+
   // Opt-out seam: forces the no-keychain path without uninstalling the helper. Storing a session
   // then also needs AIDEN_AI_ALLOW_PLAINTEXT_SESSION, so this alone cannot silently downgrade
   // anyone to plaintext credentials.
