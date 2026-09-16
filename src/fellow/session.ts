@@ -20,6 +20,15 @@ export type Session = {
   refreshToken?: string;
   obtainedAtMs: number;
   accessTokenExpMs?: number;
+  /**
+   * The Fellow password, kept only when the user asked for it at login (`auth:login --remember`).
+   * It lets the client log in again by itself once the refresh token is gone, and it is a
+   * long-lived credential rather than a revocable one — so it is written only into the encrypted
+   * file, never onto the plaintext fallback path (see write()).
+   */
+  password?: string;
+  /** The IANA zone sent at login, replayed on an automatic re-login so it matches the first one. */
+  timezone?: string;
 };
 
 const KEYCHAIN_SERVICE = APP_ID;
@@ -160,9 +169,18 @@ export class SessionStore {
     const keychain = await getKeychain();
     await mkdir(getAppDataDir(), { recursive: true });
 
+    if (!keychain && session.password !== undefined) {
+      // The remembered password only ever exists to survive a dead refresh token, and it is worth
+      // far more to an attacker than the tokens beside it. Encrypted file or nothing.
+      console.error(
+        'WARNING: no OS keychain helper found, so the remembered Fellow password was dropped rather than written in plaintext. Automatic re-login is off; refresh still works until the refresh token expires.'
+      );
+    }
+    const toStore: Session = keychain ? session : { ...session, password: undefined };
+
     if (keychain) {
       const key = await loadOrCreateKey(keychain);
-      const envelope = seal(key, JSON.stringify(session));
+      const envelope = seal(key, JSON.stringify(toStore));
       await writeFileAtomic(encryptedSessionPath(), JSON.stringify(envelope));
       return;
     }
@@ -182,7 +200,7 @@ export class SessionStore {
       `WARNING: no OS keychain helper found and ${PLAINTEXT_OPT_IN_ENV} is set; storing Fellow credentials in plaintext at ${sessionPath()} (mode 0600).`
     );
 
-    await writeFileAtomic(sessionPath(), JSON.stringify(session, null, 2));
+    await writeFileAtomic(sessionPath(), JSON.stringify(toStore, null, 2));
   }
 
   /** Clear the stored session and its data key */

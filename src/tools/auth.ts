@@ -43,7 +43,14 @@ export function registerAuthTools(server: McpServer, fellow: FellowClient) {
       title: 'Auth Status',
       description: 'Check if the MCP server has a stored Fellow session.',
       inputSchema: {},
-      outputSchema: { ok: z.boolean(), loggedIn: z.boolean(), email: z.string().optional() }
+      outputSchema: {
+        ok: z.boolean(),
+        loggedIn: z.boolean(),
+        email: z.string().optional(),
+        canRefresh: z.boolean(),
+        autoReconnect: z.boolean(),
+        accessTokenExpiresAtMs: z.number().optional()
+      }
     },
     async () => toolResponse(await fellow.status())
   );

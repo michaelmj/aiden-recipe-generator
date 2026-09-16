@@ -34,6 +34,15 @@ and potentially transcripts, telemetry, screenshots, and exports; the flag is a 
 not a security boundary after the tool is enabled. `auth.status`, refresh, and `auth.logout` continue
 to use the locally stored session without handling the password.
 
+`bun run auth:login --remember` is the one path that keeps the password at rest. It is stored inside
+the AES-256-GCM session file only — `SessionStore.write` drops it, with a warning, whenever there is
+no keychain data key to encrypt it under, so it never reaches the plaintext fallback file. It raises
+the value of the session file from "a session that can be revoked" to "the account password", which
+is why it is opt-in, reported by `auth.status` as `autoReconnect`, and removable with
+`auth:login --forget` or `auth.logout`. The client replays it at most once per dead refresh token,
+and deletes it as soon as Fellow rejects it, so a stale password cannot be replayed into a lockout.
+The remembered password is never returned by a tool, logged, or quoted in an error.
+
 The login body also carries an IANA timezone, which tells Fellow where the account is being used
 from. It is taken from the host running the login (`AIDEN_AI_LOGIN_TIMEZONE` or the `timezone`
 argument override it) and validated as a zone name. There is no fixed regional default: an

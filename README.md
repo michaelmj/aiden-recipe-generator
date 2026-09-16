@@ -92,6 +92,24 @@ disabled, sent only in the Fellow HTTPS request body, and never written to argv,
 only the resulting session is stored. Your MCP client and the model never see it. Log in once; the
 session is reused until you run `auth.logout`.
 
+The session keeps itself alive: the access token is refreshed before it expires and again if Fellow
+rejects it early, refreshes are single-flight so parallel tool calls cannot spend a rotating refresh
+token twice, and a refresh that fails on a network error is retried instead of being reported as an
+expired session.
+
+That lasts as long as Fellow's refresh token does. To stay signed in past that without a prompt:
+
+```bash
+bun run auth:login --remember   # also store the password, encrypted, for automatic re-login
+bun run auth:login --forget     # discard a remembered password, keep the session
+```
+
+`--remember` writes your Fellow password into the AES-256-GCM session file so the server can sign in
+again by itself when the refresh token dies. That is a long-lived credential at rest rather than a
+revocable one: anyone who gets both the file and your keychain data key gets the password, not just a
+session. It is refused outright when there is no OS keychain to encrypt it under, and it is never
+sent to the MCP host or the model. `auth.status` reports whether it is armed (`autoReconnect`).
+
 ### 4. Connect your MCP client
 
 **Claude Code** — the `--` matters, everything after it is the command to run:
@@ -179,6 +197,8 @@ tokens end up readable in a file.
 | Client shows the server as failed or disconnected | `bun` not on the client's `PATH`, or a relative path in the config — use absolute paths for both |
 | `auth.status` reports `loggedIn: false` | `bun run auth:login` has not run, or it ran with a different `AIDEN_AI_DATA_DIR` than the server sees |
 | `A local interactive TTY is required` | `auth:login` was piped or run inside an agent session; run it in a real terminal |
+| `The Fellow session expired and could not be refreshed` | Fellow rejected the refresh token itself (password change, revoked session, or a very old session); log in again, with `--remember` to avoid repeats |
+| `Could not reach Fellow to refresh the session` | Network or Fellow outage, not a credential problem — the stored session is intact, so retry |
 | `Login failed (401)` | Wrong email or password — the same credentials as the Fellow mobile app |
 | `Could not determine the local IANA timezone` | Set `AIDEN_AI_LOGIN_TIMEZONE`, e.g. `America/Detroit` |
 | No devices listed after a successful login | The Aiden is not registered to that Fellow account, or is offline in the mobile app |

@@ -6,6 +6,7 @@
 
 import { FELLOW_API_BASE, REQUEST_TIMEOUT_MS } from '@/config';
 import { decodeJwtExpMs, type Session, SessionStore } from '@/fellow/session';
+import { resolveLoginTimezone } from '@/fellow/timezone';
 import { AIDEN_LIMITS, type AidenCreateProfileInput, type AidenUpdateProfileInput } from '@/schemas';
 import { sanitizeText, TITLE_MAX_CHARS } from '@/text';
 
@@ -226,6 +227,17 @@ class RefreshFailure extends Error {
   }
 }
 
+/** A login Fellow did not complete. `status` is absent when the call never arrived. */
+class LoginRejected extends Error {
+  constructor(
+    readonly status: number | undefined,
+    message: string
+  ) {
+    super(message);
+    this.name = 'LoginRejected';
+  }
+}
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
@@ -253,18 +265,30 @@ export class FellowClient {
    */
   private refreshInFlight: { staleToken: string; promise: Promise<string> } | null = null;
 
-  /** Authenticate with Fellow and store session locally */
-  async login(args: { email: string; password: string; timezone: string }) {
+  /**
+   * Authenticate with Fellow and store session locally.
+   * `remember` keeps the password in the encrypted session so the client can sign in again on its
+   * own once the refresh token is gone; without it the session lasts exactly as long as Fellow's
+   * refresh token does.
+   */
+  async login(args: { email: string; password: string; timezone: string; remember?: boolean }) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
     try {
-      const res = await fetch(`${FELLOW_API_BASE}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify(args),
-        signal: controller.signal
-      });
+      let res: Response;
+      try {
+        // Built field by field: `remember` is ours, and must not be forwarded to Fellow.
+        res = await fetch(`${FELLOW_API_BASE}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ email: args.email, password: args.password, timezone: args.timezone }),
+          signal: controller.signal
+        });
+      } catch {
+        const reason = controller.signal.aborted ? 'the request timed out' : 'network error';
+        throw new LoginRejected(undefined, `Login could not reach Fellow (${reason}).`);
+      }
 
       if (!res.ok) {
         // The body is not quoted: a login response can echo back the submitted email or password,
@@ -273,32 +297,51 @@ export class FellowClient {
           res.status === 401 || res.status === 403
             ? 'double-check the email and password'
             : 'Fellow did not accept the login';
-        throw new Error(`Login failed (${res.status}): ${reason}.`);
+        throw new LoginRejected(res.status, `Login failed (${res.status}): ${reason}.`);
       }
 
       const json = (await res.json()) as { accessToken?: string; refreshToken?: string; token?: string };
       const accessToken = json.accessToken ?? json.token;
-      if (!accessToken) throw new Error('Login response missing accessToken.');
+      if (!accessToken) throw new LoginRejected(res.status, 'Login response missing accessToken.');
 
       const session: Session = {
         email: args.email,
         accessToken,
         refreshToken: json.refreshToken,
         obtainedAtMs: Date.now(),
-        accessTokenExpMs: decodeJwtExpMs(accessToken)
+        accessTokenExpMs: decodeJwtExpMs(accessToken),
+        password: args.remember ? args.password : undefined,
+        timezone: args.timezone
       };
       await this.store.write(session);
 
-      return { ok: true, email: args.email };
+      return { ok: true, email: args.email, remembered: Boolean(args.remember) };
     } finally {
       clearTimeout(timeout);
     }
   }
 
+  /** Drop a remembered password, keeping the session itself. */
+  async forgetPassword() {
+    const session = await this.store.read();
+    if (!session) return { ok: true, remembered: false };
+    if (session.password !== undefined) await this.store.write({ ...session, password: undefined });
+    return { ok: true, remembered: false };
+  }
+
   /** Check if we have a valid session */
   async status() {
     const session = await this.store.read();
-    return { ok: true, loggedIn: Boolean(session), email: session?.email };
+    return {
+      ok: true,
+      loggedIn: Boolean(session),
+      email: session?.email,
+      // Whether this session can rebuild itself: a refresh token covers the usual case, a
+      // remembered password covers the case where even the refresh token is gone.
+      canRefresh: Boolean(session?.refreshToken),
+      autoReconnect: Boolean(session?.password),
+      accessTokenExpiresAtMs: session?.accessTokenExpMs
+    };
   }
 
   /** Clear stored session */
@@ -353,7 +396,45 @@ export class FellowClient {
       }
     }
 
+    // The refresh token is gone or void. With a remembered password this is recoverable without
+    // the user; without one it is not.
+    if (session.password) return this.reloginWithStoredPassword(session);
+
     throw new Error(RE_LOGIN_MESSAGE);
+  }
+
+  /**
+   * Sign in again using the password the user asked this machine to remember.
+   * A password Fellow now rejects is deleted rather than retried: the next tool call would
+   * otherwise replay it on every request, which is how an account gets locked out.
+   */
+  private async reloginWithStoredPassword(session: Session): Promise<string> {
+    const password = session.password;
+    if (!password) throw new Error(RE_LOGIN_MESSAGE);
+
+    try {
+      await this.login({
+        email: session.email,
+        password,
+        timezone: session.timezone ?? resolveLoginTimezone(),
+        remember: true
+      });
+    } catch (err) {
+      const rejected = err instanceof LoginRejected && err.status !== undefined && err.status < 500;
+      if (rejected) {
+        await this.store.write({ ...session, password: undefined });
+        throw new Error(
+          'The Fellow session expired and the remembered password no longer works — it has been discarded. Run `bun run auth:login --remember` again.'
+        );
+      }
+      throw new Error(
+        'The Fellow session expired and Fellow could not be reached to sign in again. The stored credentials are still there; retry in a moment.'
+      );
+    }
+
+    const renewed = await this.store.read();
+    if (!renewed?.accessToken) throw new Error(RE_LOGIN_MESSAGE);
+    return renewed.accessToken;
   }
 
   /**

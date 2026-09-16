@@ -43,7 +43,16 @@ export async function readHiddenPassword(
   });
 }
 
-export async function loginInteractively(client = new FellowClient()): Promise<void> {
+/**
+ * Log in, optionally remembering the password.
+ * `remember` trades a revocable refresh token for a long-lived credential on disk: it keeps the
+ * server signed in with no human present, at the cost of a stored password. Opt-in only, and it is
+ * refused outright when there is no keychain to encrypt it under (see SessionStore.write).
+ */
+export async function loginInteractively(
+  client = new FellowClient(),
+  opts: { remember?: boolean } = {}
+): Promise<void> {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
     throw new Error('Interactive login requires a local TTY; credentials are not accepted through argv or pipes.');
   }
@@ -56,13 +65,28 @@ export async function loginInteractively(client = new FellowClient()): Promise<v
   if (!password) throw new Error('Password is required.');
   const timezone = resolveLoginTimezone(process.env.AIDEN_AI_LOGIN_TIMEZONE);
 
-  const result = await client.login({ email, password, timezone });
+  const result = await client.login({ email, password, timezone, remember: opts.remember });
   process.stdout.write(`Logged in as ${result.email}. You can now use auth.status through MCP.\n`);
+  process.stdout.write(
+    result.remembered
+      ? 'Password stored in the encrypted session; the server will sign in again by itself if the refresh token expires. Run `bun run auth:login --forget` to undo.\n'
+      : 'Password not stored. The session lasts until the Fellow refresh token expires; add --remember to keep signing in automatically.\n'
+  );
+}
+
+/** Drop a remembered password without touching the rest of the session. */
+export async function forgetPassword(client = new FellowClient()): Promise<void> {
+  await client.forgetPassword();
+  process.stdout.write('Remembered password discarded. The current session stays signed in until it expires.\n');
 }
 
 const invokedPath = process.argv[1];
 if (invokedPath && import.meta.url === pathToFileURL(invokedPath).href) {
-  loginInteractively().catch((error: unknown) => {
+  const flags = process.argv.slice(2);
+  const run = flags.includes('--forget')
+    ? forgetPassword()
+    : loginInteractively(undefined, { remember: flags.includes('--remember') });
+  run.catch((error: unknown) => {
     process.stderr.write(`${error instanceof Error ? error.message : 'Login failed.'}\n`);
     process.exitCode = 1;
   });
