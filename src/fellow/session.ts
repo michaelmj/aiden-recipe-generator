@@ -8,7 +8,7 @@
  */
 
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { APP_ID, getAppDataDir } from '@/config';
 import { getKeychain, type Keychain } from '@/fellow/keychain';
@@ -80,6 +80,24 @@ function unseal(key: Buffer, env: Envelope): string {
   return Buffer.concat([decipher.update(Buffer.from(env.ct, 'base64')), decipher.final()]).toString('utf8');
 }
 
+/**
+ * Write a file atomically: a temp file in the same directory, then a rename over the target.
+ * The session is written by the login CLI and by every token refresh, so a half-written file is
+ * reachable in normal use — and a truncated session.enc.json does not read back as "stale", it
+ * reads back as "re-authentication required", which is the failure this whole module exists to
+ * avoid. rename(2) within a directory is atomic, so a reader sees the old file or the new one.
+ */
+async function writeFileAtomic(path: string, contents: string): Promise<void> {
+  const temp = `${path}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`;
+  try {
+    await writeFile(temp, contents, { mode: 0o600 });
+    await rename(temp, path);
+  } catch (err) {
+    await rm(temp, { force: true });
+    throw err;
+  }
+}
+
 /** Read and JSON-parse a file, treating a missing file as null. */
 async function readJson(path: string): Promise<unknown | null> {
   let raw: string;
@@ -145,7 +163,7 @@ export class SessionStore {
     if (keychain) {
       const key = await loadOrCreateKey(keychain);
       const envelope = seal(key, JSON.stringify(session));
-      await writeFile(encryptedSessionPath(), JSON.stringify(envelope), { mode: 0o600 });
+      await writeFileAtomic(encryptedSessionPath(), JSON.stringify(envelope));
       return;
     }
 
@@ -164,7 +182,7 @@ export class SessionStore {
       `WARNING: no OS keychain helper found and ${PLAINTEXT_OPT_IN_ENV} is set; storing Fellow credentials in plaintext at ${sessionPath()} (mode 0600).`
     );
 
-    await writeFile(sessionPath(), JSON.stringify(session, null, 2), { mode: 0o600 });
+    await writeFileAtomic(sessionPath(), JSON.stringify(session, null, 2));
   }
 
   /** Clear the stored session and its data key */
