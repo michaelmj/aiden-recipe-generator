@@ -27,7 +27,7 @@ export const AIDEN_LIMITS = {
   /** Pulses per brew */
   pulsesNumber: { min: 1, max: 10 },
   /** Seconds between pulses */
-  pulsesInterval: { min: 5, max: 60 },
+  pulsesInterval: { min: 1, max: 60 },
   title: { max: 50 }
 } as const;
 

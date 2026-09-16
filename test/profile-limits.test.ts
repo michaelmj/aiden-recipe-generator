@@ -100,7 +100,7 @@ describe('AidenCreateProfileSchema', () => {
       { ssPulsesNumber: 0 },
       { ssPulsesNumber: 11 },
       { batchPulsesNumber: 99 },
-      { ssPulsesInterval: 4 },
+      { ssPulsesInterval: 0 },
       { batchPulsesInterval: 61 },
       { bloomDuration: 0 },
       { bloomDuration: 121 },
@@ -109,6 +109,12 @@ describe('AidenCreateProfileSchema', () => {
     ];
     for (const patch of outOfRange) {
       expect(AidenCreateProfileSchema.safeParse({ ...realProfile, ...patch }).success).toBe(false);
+    }
+  });
+
+  test('accepts the full 1-60s pulse interval range (aiden-recipe-generator-e7n)', () => {
+    for (const ssPulsesInterval of [1, 4, 5, 60]) {
+      expect(AidenCreateProfileSchema.safeParse({ ...realProfile, ssPulsesInterval }).success).toBe(true);
     }
   });
 
