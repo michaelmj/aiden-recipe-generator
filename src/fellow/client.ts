@@ -197,11 +197,61 @@ function upstreamError(label: string, status: number): Error {
 }
 
 /**
+ * Treat a token as spent this long before its stated expiry.
+ * A minute absorbs ordinary clock skew between this machine and Fellow, so a request does not go
+ * out carrying a token the server has already retired.
+ */
+const TOKEN_EXPIRY_SKEW_MS = 60_000;
+
+/** Backoff between refresh attempts that failed for a reason that may pass on its own. */
+const REFRESH_RETRY_DELAYS_MS = [500, 2_000];
+
+const NO_SESSION_MESSAGE = 'No Fellow session stored yet. Run `bun run auth:login` in a local terminal to sign in.';
+const RE_LOGIN_MESSAGE = 'The Fellow session expired and could not be refreshed. Run `bun run auth:login` again.';
+
+/**
+ * A refresh that produced no token.
+ * `terminal` separates "Fellow rejected this refresh token", which only a new login fixes, from
+ * "the call never got through" — a dropped connection, a timeout, a Fellow outage — which says
+ * nothing about the credentials and must not cost the user their session.
+ */
+class RefreshFailure extends Error {
+  constructor(
+    readonly terminal: boolean,
+    readonly status: number | undefined,
+    message: string
+  ) {
+    super(message);
+    this.name = 'RefreshFailure';
+  }
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * True once the stored access token is at or past its usable life.
+ * A token whose exp claim could not be read is used until Fellow rejects it; send() recovers from
+ * that 401 rather than guessing a lifetime.
+ */
+function isSpent(session: Session): boolean {
+  return session.accessTokenExpMs !== undefined && Date.now() > session.accessTokenExpMs - TOKEN_EXPIRY_SKEW_MS;
+}
+
+/**
  * Client for the Fellow Aiden API.
  * Handles auth, device queries, and profile management.
  */
 export class FellowClient {
   private store = new SessionStore();
+
+  /**
+   * The refresh currently in flight, and the access token it is replacing.
+   * Tool calls arrive in parallel, and Fellow hands back a new refresh token each time: two
+   * concurrent refreshes would spend the same refresh token twice and leave the loser's rotated
+   * token stored but already void — the "keeps asking me to log in again" failure. Callers that
+   * want the same token replaced wait on the one call instead of starting their own.
+   */
+  private refreshInFlight: { staleToken: string; promise: Promise<string> } | null = null;
 
   /** Authenticate with Fellow and store session locally */
   async login(args: { email: string; password: string; timezone: string }) {
@@ -257,47 +307,101 @@ export class FellowClient {
     return { ok: true };
   }
 
+  /** The token to send, refreshing first when the stored one has run out its clock. */
   private async getToken(): Promise<string> {
     const session = await this.store.read();
-    if (!session?.accessToken)
-      throw new Error('No Fellow session stored yet. Run `bun run auth:login` in a local terminal to sign in.');
+    if (!session?.accessToken) throw new Error(NO_SESSION_MESSAGE);
+    if (!isSpent(session)) return session.accessToken;
+    return this.reauthorize(session.accessToken);
+  }
 
-    // Check if token is expired or about to expire (30s buffer)
-    const isExpired = session.accessTokenExpMs && Date.now() > session.accessTokenExpMs - 30_000;
+  /**
+   * Replace `staleToken` with a working one, at most once per stale token.
+   * Concurrent callers holding the same dead token share the single call rather than racing each
+   * other through Fellow's refresh-token rotation.
+   */
+  private reauthorize(staleToken: string): Promise<string> {
+    const existing = this.refreshInFlight;
+    if (existing?.staleToken === staleToken) return existing.promise;
 
-    if (isExpired && session.refreshToken) {
-      // Attempt automatic refresh
+    const promise = this.renew(staleToken).finally(() => {
+      if (this.refreshInFlight?.promise === promise) this.refreshInFlight = null;
+    });
+    this.refreshInFlight = { staleToken, promise };
+    return promise;
+  }
+
+  /** One attempt at getting back to a usable token. Callers go through reauthorize(). */
+  private async renew(staleToken: string): Promise<string> {
+    // Re-read first: another process — a second MCP server, or `bun run auth:login` in a terminal —
+    // may already have written a good token while this call was queued.
+    const session = await this.store.read();
+    if (!session?.accessToken) throw new Error(NO_SESSION_MESSAGE);
+    if (session.accessToken !== staleToken && !isSpent(session)) return session.accessToken;
+
+    if (session.refreshToken) {
       try {
         return await this.refreshSession(session);
-      } catch {
-        throw new Error('The Fellow session expired and could not be refreshed. Run `bun run auth:login` again.');
+      } catch (err) {
+        // A refresh that never reached Fellow says nothing about the credentials. Reporting it as
+        // an expired session is what sends people back to `auth:login` while their session is fine.
+        if (err instanceof RefreshFailure && !err.terminal) {
+          throw new Error(
+            `Could not reach Fellow to refresh the session (${err.message}). The stored session is still there; retry in a moment.`
+          );
+        }
       }
     }
 
-    if (isExpired) {
-      throw new Error('The Fellow session expired. Run `bun run auth:login` again.');
-    }
-
-    return session.accessToken;
+    throw new Error(RE_LOGIN_MESSAGE);
   }
 
+  /**
+   * Exchange the refresh token for a new access token, retrying what is worth retrying.
+   * Throws RefreshFailure so the caller can tell a rejected credential from an unreachable API.
+   */
   private async refreshSession(session: Session): Promise<string> {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await this.refreshOnce(session);
+      } catch (err) {
+        const failure =
+          err instanceof RefreshFailure ? err : new RefreshFailure(false, undefined, (err as Error).message);
+        if (failure.terminal || attempt >= REFRESH_RETRY_DELAYS_MS.length) throw failure;
+        await sleep(REFRESH_RETRY_DELAYS_MS[attempt] ?? 0);
+      }
+    }
+  }
+
+  private async refreshOnce(session: Session): Promise<string> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
     try {
-      const res = await fetch(`${FELLOW_API_BASE}/auth/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ refreshToken: session.refreshToken }),
-        signal: controller.signal
-      });
+      let res: Response;
+      try {
+        res = await fetch(`${FELLOW_API_BASE}/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ refreshToken: session.refreshToken }),
+          signal: controller.signal
+        });
+      } catch {
+        // Connection refused, DNS failure, or our own timeout: nothing was decided upstream.
+        const reason = controller.signal.aborted ? 'the request timed out' : 'network error';
+        throw new RefreshFailure(false, undefined, reason);
+      }
 
-      if (!res.ok) throw new Error('Refresh failed');
+      if (!res.ok) {
+        // 408/429/5xx can pass; 400/401/403 mean Fellow will not honour this refresh token again.
+        // The body is never quoted — it can echo the token that was sent. See docs/THREAT-MODEL.md.
+        const retryable = res.status === 408 || res.status === 429 || res.status >= 500;
+        throw new RefreshFailure(!retryable, res.status, `Fellow answered ${res.status}`);
+      }
 
-      const json = (await res.json()) as { accessToken?: string; refreshToken?: string };
+      const json = (await res.json().catch(() => ({}))) as { accessToken?: string; refreshToken?: string };
       const accessToken = json.accessToken;
-      if (!accessToken) throw new Error('Refresh response missing accessToken');
+      if (!accessToken) throw new RefreshFailure(true, res.status, 'the refresh response carried no accessToken');
 
       const updated: Session = {
         ...session,
@@ -314,9 +418,11 @@ export class FellowClient {
     }
   }
 
-  private async send(
+  /** Send one authenticated request with the given token. No retry, no error mapping. */
+  private async attempt(
     method: string,
     path: string,
+    token: string,
     opts?: { query?: Record<string, unknown>; body?: unknown }
   ): Promise<Response> {
     const url = new URL(`${FELLOW_API_BASE}${path}`);
@@ -328,7 +434,7 @@ export class FellowClient {
 
     const headers: Record<string, string> = {
       Accept: 'application/json',
-      Authorization: `Bearer ${await this.getToken()}`
+      Authorization: `Bearer ${token}`
     };
     if (opts?.body) headers['Content-Type'] = 'application/json';
 
@@ -336,17 +442,42 @@ export class FellowClient {
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
     try {
-      const res = await fetch(url, {
+      return await fetch(url, {
         method,
         headers,
         body: opts?.body ? JSON.stringify(opts.body) : undefined,
         signal: controller.signal
       });
-      if (!res.ok) throw upstreamError(`${method} ${path}`, res.status);
-      return res;
     } finally {
       clearTimeout(timeout);
     }
+  }
+
+  /**
+   * Send an authenticated request, renewing the token once if Fellow rejects it.
+   * An access token can stop working before the exp claim says it should — revoked from the phone
+   * app, invalidated by a password change, or simply issued by a clock that disagrees with ours.
+   * Expiry alone is therefore not a sufficient trigger: a 401 is the server telling us directly,
+   * and the request never ran, so re-sending it after a refresh is safe for writes too.
+   */
+  private async send(
+    method: string,
+    path: string,
+    opts?: { query?: Record<string, unknown>; body?: unknown }
+  ): Promise<Response> {
+    const token = await this.getToken();
+    const res = await this.attempt(method, path, token, opts);
+
+    if (res.status === 401 || res.status === 403) {
+      await res.body?.cancel().catch(() => {});
+      const renewed = await this.reauthorize(token);
+      const retry = await this.attempt(method, path, renewed, opts);
+      if (!retry.ok) throw upstreamError(`${method} ${path}`, retry.status);
+      return retry;
+    }
+
+    if (!res.ok) throw upstreamError(`${method} ${path}`, res.status);
+    return res;
   }
 
   /**
