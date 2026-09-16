@@ -170,10 +170,18 @@ the environment wins, and the stored password is dropped on the next sign-in.
 
 ### 4. Connect your MCP client
 
+If you set up the 1Password route above, the command the client runs is `op run` with the server as
+its arguments — see [Log in to Fellow](#3-log-in-to-fellow) for both forms. Otherwise the server is
+launched directly, as below.
+
 **Claude Code** — the `--` matters, everything after it is the command to run:
 
 ```bash
 claude mcp add aiden -- bun run /absolute/path/to/aiden-recipe-generator/src/index.ts
+
+# or, with 1Password supplying the Fellow password:
+claude mcp add aiden -- op run --env-file=/absolute/path/to/fellow.env -- \
+  bun run /absolute/path/to/aiden-recipe-generator/src/index.ts
 ```
 
 Add `-s user` to make it available in every project instead of just the current one. Restart
@@ -194,8 +202,9 @@ reads `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) 
 }
 ```
 
-Use an absolute path to `bun` (`which bun`, often `/opt/homebrew/bin/bun`) if the client starts
-with a minimal `PATH` and reports that the command was not found. Environment overrides from
+Use an absolute path to `bun` (`which bun`, often `/opt/homebrew/bin/bun`) — and to `op`, if you
+wrap the launch in it — when the client starts with a minimal `PATH` and reports that the command
+was not found. Environment overrides from
 [Storage and environment](#storage-and-environment) go in an `"env": { ... }` object here, or after
 `-e` on the `claude mcp add` line.
 
@@ -258,7 +267,7 @@ tokens end up readable in a file.
 | `auth.status` reports `loggedIn: false` | `bun run auth:login` has not run, or it ran with a different `AIDEN_AI_DATA_DIR` than the server sees |
 | `A local interactive TTY is required` | `auth:login` was piped or run inside an agent session; run it in a real terminal |
 | `Fellow rejected the credentials supplied through AIDEN_AI_FELLOW_PASSWORD` | Wrong secret in the vault, or the wrong `AIDEN_AI_FELLOW_EMAIL`. They are tried once per process, so restart the server after fixing them |
-| `the \`op\` CLI could not be run` | `AIDEN_AI_FELLOW_PASSWORD` holds an unresolved `op://` reference but `op` is not on the server's `PATH` — use an absolute path, or wrap the launch in `op run` instead |
+| `the op CLI could not be run` | `AIDEN_AI_FELLOW_PASSWORD` holds an unresolved `op://` reference but `op` is not on the server's `PATH` — use an absolute path, or wrap the launch in `op run` instead |
 | `The 1Password CLI could not read the secret` | The reference is wrong, or `op` wanted an interactive unlock; set `OP_SERVICE_ACCOUNT_TOKEN` for a background server |
 | `The Fellow session expired and could not be refreshed` | Fellow rejected the refresh token itself (password change, revoked session, or a very old session); log in again, with `--remember` to avoid repeats |
 | `Could not reach Fellow to refresh the session` | Network or Fellow outage, not a credential problem — the stored session is intact, so retry |
