@@ -41,7 +41,8 @@ export function registerAuthTools(server: McpServer, fellow: FellowClient) {
     'auth.status',
     {
       title: 'Auth Status',
-      description: 'Check if the MCP server has a stored Fellow session.',
+      description:
+        'Check if the MCP server has a stored Fellow session, and whether it can renew itself without a human.',
       inputSchema: {},
       outputSchema: {
         ok: z.boolean(),
@@ -49,6 +50,7 @@ export function registerAuthTools(server: McpServer, fellow: FellowClient) {
         email: z.string().optional(),
         canRefresh: z.boolean(),
         autoReconnect: z.boolean(),
+        autoReconnectSource: z.enum(['environment', 'stored-password']).optional(),
         accessTokenExpiresAtMs: z.number().optional()
       }
     },

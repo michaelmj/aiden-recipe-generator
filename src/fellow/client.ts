@@ -5,6 +5,7 @@
  */
 
 import { FELLOW_API_BASE, REQUEST_TIMEOUT_MS } from '@/config';
+import { externalCredentialsConfigured, PASSWORD_ENV, readExternalCredentials } from '@/fellow/credentials';
 import { decodeJwtExpMs, type Session, SessionStore } from '@/fellow/session';
 import { resolveLoginTimezone } from '@/fellow/timezone';
 import { AIDEN_LIMITS, type AidenCreateProfileInput, type AidenUpdateProfileInput } from '@/schemas';
@@ -207,7 +208,9 @@ const TOKEN_EXPIRY_SKEW_MS = 60_000;
 /** Backoff between refresh attempts that failed for a reason that may pass on its own. */
 const REFRESH_RETRY_DELAYS_MS = [500, 2_000];
 
-const NO_SESSION_MESSAGE = 'No Fellow session stored yet. Run `bun run auth:login` in a local terminal to sign in.';
+const NO_SESSION_MESSAGE =
+  'No Fellow session stored yet. Run `bun run auth:login` in a local terminal, or start the server with ' +
+  `${PASSWORD_ENV} supplied by your secret manager (see README).`;
 const RE_LOGIN_MESSAGE = 'The Fellow session expired and could not be refreshed. Run `bun run auth:login` again.';
 
 /**
@@ -264,6 +267,15 @@ export class FellowClient {
    * want the same token replaced wait on the one call instead of starting their own.
    */
   private refreshInFlight: { staleToken: string; promise: Promise<string> } | null = null;
+
+  /** The cold-start login in flight, so parallel first calls share one login instead of racing. */
+  private bootstrapInFlight: Promise<string | null> | null = null;
+
+  /**
+   * Set once Fellow has refused the environment credentials, so they are tried once per process
+   * rather than on every tool call. Nothing here can rotate them; only the operator can.
+   */
+  private environmentCredentialsRejected = false;
 
   /**
    * Authenticate with Fellow and store session locally.
@@ -337,9 +349,17 @@ export class FellowClient {
       loggedIn: Boolean(session),
       email: session?.email,
       // Whether this session can rebuild itself: a refresh token covers the usual case, a
-      // remembered password covers the case where even the refresh token is gone.
+      // credentials from the environment or a remembered password cover the case where even the
+      // refresh token is gone.
       canRefresh: Boolean(session?.refreshToken),
-      autoReconnect: Boolean(session?.password),
+      autoReconnect: externalCredentialsConfigured() || Boolean(session?.password),
+      // Which of the two is armed, because they are worth very different things: `environment`
+      // means a secret manager holds the password, `stored-password` means this disk does.
+      autoReconnectSource: externalCredentialsConfigured()
+        ? ('environment' as const)
+        : session?.password
+          ? ('stored-password' as const)
+          : undefined,
       accessTokenExpiresAtMs: session?.accessTokenExpMs
     };
   }
@@ -353,9 +373,32 @@ export class FellowClient {
   /** The token to send, refreshing first when the stored one has run out its clock. */
   private async getToken(): Promise<string> {
     const session = await this.store.read();
-    if (!session?.accessToken) throw new Error(NO_SESSION_MESSAGE);
+    if (!session?.accessToken) {
+      // Nothing stored at all. With credentials in the environment that is not an error state, it
+      // is a cold start: sign in and carry on, so a fresh container never needs a human at a TTY.
+      const bootstrapped = await this.bootstrapFromEnvironment();
+      if (bootstrapped) return bootstrapped;
+      throw new Error(NO_SESSION_MESSAGE);
+    }
     if (!isSpent(session)) return session.accessToken;
     return this.reauthorize(session.accessToken);
+  }
+
+  /**
+   * Cold-start login from environment credentials, shared by concurrent callers.
+   * Tool calls arrive in parallel, and two simultaneous logins would each rotate the other's
+   * refresh token — the same race `reauthorize` exists to avoid, one step earlier.
+   */
+  private bootstrapFromEnvironment(): Promise<string | null> {
+    if (!externalCredentialsConfigured()) return Promise.resolve(null);
+    const existing = this.bootstrapInFlight;
+    if (existing) return existing;
+
+    const promise = this.loginFromEnvironment().finally(() => {
+      if (this.bootstrapInFlight === promise) this.bootstrapInFlight = null;
+    });
+    this.bootstrapInFlight = promise;
+    return promise;
   }
 
   /**
@@ -396,11 +439,53 @@ export class FellowClient {
       }
     }
 
-    // The refresh token is gone or void. With a remembered password this is recoverable without
-    // the user; without one it is not.
+    // The refresh token is gone or void. Two things can still recover it without the user, and
+    // the environment goes first: those credentials came from a secret manager for this run only,
+    // so preferring them means the copy on disk is never the one we reach for.
+    const fromEnvironment = await this.loginFromEnvironment(session.email, session.timezone);
+    if (fromEnvironment) return fromEnvironment;
+
     if (session.password) return this.reloginWithStoredPassword(session);
 
     throw new Error(RE_LOGIN_MESSAGE);
+  }
+
+  /**
+   * Sign in with credentials supplied from outside this process, or null when there are none.
+   * `remember: false` is the whole point: the tokens are stored, the password is not — it stays in
+   * the secret manager that lent it to us.
+   */
+  private async loginFromEnvironment(fallbackEmail?: string, timezone?: string): Promise<string | null> {
+    if (!externalCredentialsConfigured() || this.environmentCredentialsRejected) return null;
+
+    const credentials = await readExternalCredentials(fallbackEmail);
+    if (!credentials) return null;
+
+    try {
+      await this.login({
+        email: credentials.email,
+        password: credentials.password,
+        timezone: timezone ?? resolveLoginTimezone(),
+        remember: false
+      });
+    } catch (err) {
+      if (err instanceof LoginRejected && err.status !== undefined && err.status < 500) {
+        // Latched for the life of the process. Unlike a remembered password we cannot delete this
+        // one — it is the operator's configuration — so the only way to stop replaying a rejected
+        // credential on every tool call, which is how an account gets locked out, is to stop trying.
+        this.environmentCredentialsRejected = true;
+        throw new Error(
+          `Fellow rejected the credentials supplied through ${PASSWORD_ENV}. Fix the stored secret and restart the server.`
+        );
+      }
+      throw new Error(
+        `Fellow could not be reached to sign in with the credentials from ${PASSWORD_ENV}; retry in a moment.`
+      );
+    }
+
+    const renewed = await this.store.read();
+    if (!renewed?.accessToken) throw new Error(RE_LOGIN_MESSAGE);
+    return renewed.accessToken;
   }
 
   /**

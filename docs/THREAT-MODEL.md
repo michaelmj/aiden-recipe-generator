@@ -34,7 +34,26 @@ and potentially transcripts, telemetry, screenshots, and exports; the flag is a 
 not a security boundary after the tool is enabled. `auth.status`, refresh, and `auth.logout` continue
 to use the locally stored session without handling the password.
 
-`bun run auth:login --remember` is the one path that keeps the password at rest. It is stored inside
+Two paths let the server sign in with nobody present, and they place the password in very different
+hands.
+
+`AIDEN_AI_FELLOW_PASSWORD` takes the password from the process environment, where a secret manager
+put it for this run — typically `op run --env-file`, which resolves `op://` references, exports them
+for the child only, and drops them on exit. Nothing long-lived is written by us: the login stores
+tokens and `remember` is forced off, so a pre-existing remembered password is cleared by the next
+sign-in rather than kept beside it. The credential's lifetime and revocation belong to the vault,
+not to this machine. The variable may also hold the `op://` reference *unresolved*, in which case it
+is resolved through `op read` at the moment a re-login needs it: the reference is a pointer and goes
+in argv, the resolved value never does, and the secret is absent from the environment — where any
+child process inherits it, and `/proc/<pid>/environ` exposes it to the same uid — for all the time
+it is not in use. The cost of that path is a dependency on `op` being present and non-interactive;
+`op`'s own stderr is never quoted into a thrown message, because it can name the account and item.
+Credentials Fellow rejects with a 4xx are latched off for the life of the process: unlike a
+remembered password this server cannot delete them, and retrying operator configuration on every
+tool call is how an account gets locked out. The environment is preferred over the stored password
+whenever both exist, and `auth.status` distinguishes them (`autoReconnectSource`).
+
+`bun run auth:login --remember` is the other path, and the one that keeps the password at rest. It is stored inside
 the AES-256-GCM session file only — `SessionStore.write` drops it, with a warning, whenever there is
 no keychain data key to encrypt it under, so it never reaches the plaintext fallback file. It raises
 the value of the session file from "a session that can be revoked" to "the account password", which

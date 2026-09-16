@@ -97,7 +97,61 @@ rejects it early, refreshes are single-flight so parallel tool calls cannot spen
 token twice, and a refresh that fails on a network error is retried instead of being reported as an
 expired session.
 
-That lasts as long as Fellow's refresh token does. To stay signed in past that without a prompt:
+That lasts as long as Fellow's refresh token does. To stay signed in past that without a prompt,
+give the server a way to sign in again. There are two, and they are not equally good.
+
+#### Recommended: let 1Password hold the password
+
+Keep the password where you already keep passwords and hand it to the server at launch, so nothing
+long-lived is written to this machine's disk at all. Store your Fellow login in 1Password, then put
+*references* — not secrets — in an env file:
+
+```bash
+# fellow.env — safe to keep next to the project; it contains pointers, not passwords
+AIDEN_AI_FELLOW_EMAIL=you@example.com
+AIDEN_AI_FELLOW_PASSWORD=op://Private/Fellow/password
+```
+
+Launch the server through [`op run`](https://1password.com/blog/securing-mcp-servers-with-1password-stop-credential-exposure-in-your-agent),
+which resolves the references, sets them for that process only, and drops them when it exits:
+
+```bash
+op run --env-file=fellow.env -- bun run /absolute/path/to/aiden-recipe-generator/src/index.ts
+```
+
+In an MCP client config, `op` becomes the command and the server becomes its arguments:
+
+```json
+{
+  "mcpServers": {
+    "aiden": {
+      "command": "/opt/homebrew/bin/op",
+      "args": [
+        "run", "--env-file=/absolute/path/to/fellow.env", "--",
+        "bun", "run", "/absolute/path/to/aiden-recipe-generator/src/index.ts"
+      ]
+    }
+  }
+}
+```
+
+With this set up, `bun run auth:login` becomes optional: a server that starts with no session at all
+signs itself in, and one whose refresh token has died signs in again. Only tokens are ever stored.
+
+If you would rather the password not sit in the process environment for the server's whole life,
+leave the `op://` reference **unresolved** — set `AIDEN_AI_FELLOW_PASSWORD=op://...` directly in the
+MCP client's `"env"` block and skip the `op run` wrapper. The server then shells out to `op read` at
+the moment a re-login needs it, so the secret exists in memory for a few milliseconds instead of for
+days. That path needs `op` on `PATH` and a non-interactive session — an
+[OP_SERVICE_ACCOUNT_TOKEN](https://developer.1password.com/docs/service-accounts/) — because a
+background MCP server has no terminal on which to approve a biometric prompt.
+
+Any secret manager that can run a command with environment variables works the same way; 1Password
+is just the one documented here. Only `op://` values get the lazy-resolution treatment.
+
+#### Fallback: remember the password on this machine
+
+With no secret manager available:
 
 ```bash
 bun run auth:login --remember   # also store the password, encrypted, for automatic re-login
@@ -107,8 +161,12 @@ bun run auth:login --forget     # discard a remembered password, keep the sessio
 `--remember` writes your Fellow password into the AES-256-GCM session file so the server can sign in
 again by itself when the refresh token dies. That is a long-lived credential at rest rather than a
 revocable one: anyone who gets both the file and your keychain data key gets the password, not just a
-session. It is refused outright when there is no OS keychain to encrypt it under, and it is never
-sent to the MCP host or the model. `auth.status` reports whether it is armed (`autoReconnect`).
+session — which is exactly what the 1Password route above avoids. It is refused outright when there
+is no OS keychain to encrypt it under, and it is never sent to the MCP host or the model.
+
+`auth.status` reports whether automatic reconnect is armed (`autoReconnect`) and where it would get
+the password (`autoReconnectSource`: `environment` or `stored-password`). When both are configured
+the environment wins, and the stored password is dropped on the next sign-in.
 
 ### 4. Connect your MCP client
 
@@ -179,6 +237,8 @@ approvals. Details in [docs/LOCAL-STORAGE.md](docs/LOCAL-STORAGE.md).
 |---|---|
 | `AIDEN_AI_DATA_DIR` | Move that directory somewhere else |
 | `AIDEN_AI_LOGIN_TIMEZONE` | Send an explicit IANA zone at login instead of the host's |
+| `AIDEN_AI_FELLOW_EMAIL` | Fellow account to sign in as when credentials come from the environment |
+| `AIDEN_AI_FELLOW_PASSWORD` | The password, or an `op://vault/item/field` reference resolved through the 1Password CLI when it is needed (see [Log in to Fellow](#3-log-in-to-fellow)) |
 | `AIDEN_AI_SHEET_CSV_URL` | Opt into a live community sheet (see [Recipe sources](#recipe-sources)) |
 | `AIDEN_AI_SHEET_ALLOWED_HOSTS` | Allow sheet hosts other than `docs.google.com` |
 | `AIDEN_AI_DISABLE_KEYCHAIN=1` | Skip the OS keychain |
@@ -197,6 +257,9 @@ tokens end up readable in a file.
 | Client shows the server as failed or disconnected | `bun` not on the client's `PATH`, or a relative path in the config — use absolute paths for both |
 | `auth.status` reports `loggedIn: false` | `bun run auth:login` has not run, or it ran with a different `AIDEN_AI_DATA_DIR` than the server sees |
 | `A local interactive TTY is required` | `auth:login` was piped or run inside an agent session; run it in a real terminal |
+| `Fellow rejected the credentials supplied through AIDEN_AI_FELLOW_PASSWORD` | Wrong secret in the vault, or the wrong `AIDEN_AI_FELLOW_EMAIL`. They are tried once per process, so restart the server after fixing them |
+| `the \`op\` CLI could not be run` | `AIDEN_AI_FELLOW_PASSWORD` holds an unresolved `op://` reference but `op` is not on the server's `PATH` — use an absolute path, or wrap the launch in `op run` instead |
+| `The 1Password CLI could not read the secret` | The reference is wrong, or `op` wanted an interactive unlock; set `OP_SERVICE_ACCOUNT_TOKEN` for a background server |
 | `The Fellow session expired and could not be refreshed` | Fellow rejected the refresh token itself (password change, revoked session, or a very old session); log in again, with `--remember` to avoid repeats |
 | `Could not reach Fellow to refresh the session` | Network or Fellow outage, not a credential problem — the stored session is intact, so retry |
 | `Login failed (401)` | Wrong email or password — the same credentials as the Fellow mobile app |

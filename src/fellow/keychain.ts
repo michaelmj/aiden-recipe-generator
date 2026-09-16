@@ -16,8 +16,8 @@
  * (see `src/fellow/session.ts`).
  */
 
-import { spawn } from 'node:child_process';
 import { platform } from 'node:os';
+import { onPath, runHelper } from '@/proc';
 
 /** A newline would desync the macOS confirm prompt, which reads the secret twice. */
 const SECRET_PATTERN = /^[^\n\r]+$/;
@@ -28,82 +28,11 @@ const SECRET_PATTERN = /^[^\n\r]+$/;
  */
 export const MAX_SECRET_LENGTH = 128;
 
-/** Max bytes we accept from a helper's stdout, to bound a misbehaving child. */
-const MAX_OUTPUT_BYTES = 256 * 1024;
-
-/** How long a helper may run before we kill it. */
-const HELPER_TIMEOUT_MS = 10_000;
-
 export type Keychain = {
   get(service: string, account: string): Promise<string | null>;
   set(service: string, account: string, secret: string): Promise<void>;
   delete(service: string, account: string): Promise<boolean>;
 };
-
-type RunResult = { code: number; stdout: string; stderr: string };
-
-/** Run a helper with no shell, feeding `input` on stdin and capturing stdout. */
-function run(command: string, args: string[], input?: string): Promise<RunResult> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: HELPER_TIMEOUT_MS
-    });
-
-    const out: Buffer[] = [];
-    const err: Buffer[] = [];
-    let outBytes = 0;
-    let settled = false;
-
-    const fail = (error: Error) => {
-      if (settled) return;
-      settled = true;
-      child.kill();
-      reject(error);
-    };
-
-    child.stdout.on('data', (chunk: Buffer) => {
-      outBytes += chunk.length;
-      if (outBytes > MAX_OUTPUT_BYTES) {
-        fail(new Error(`${command} produced more than ${MAX_OUTPUT_BYTES} bytes`));
-        return;
-      }
-      out.push(chunk);
-    });
-    child.stderr.on('data', (chunk: Buffer) => err.push(chunk));
-
-    child.on('error', fail);
-    child.on('close', (code, signal) => {
-      if (settled) return;
-      settled = true;
-      if (signal) {
-        reject(new Error(`${command} terminated with ${signal}`));
-        return;
-      }
-      resolve({
-        code: code ?? 1,
-        stdout: Buffer.concat(out).toString('utf8'),
-        stderr: Buffer.concat(err).toString('utf8')
-      });
-    });
-
-    child.stdin.on('error', () => {
-      // Helper closed stdin early (e.g. it found nothing to prompt for); the exit code decides.
-    });
-    if (input !== undefined) child.stdin.write(input);
-    child.stdin.end();
-  });
-}
-
-/** True if `command` resolves on PATH. */
-async function onPath(command: string): Promise<boolean> {
-  try {
-    const { code } = await run('/usr/bin/env', ['which', command]);
-    return code === 0;
-  } catch {
-    return false;
-  }
-}
 
 function assertStorable(secret: string): void {
   if (!SECRET_PATTERN.test(secret)) {
@@ -119,7 +48,7 @@ function assertStorable(secret: string): void {
 /** macOS Keychain via security(1). Exit code 44 means "no such item". */
 const macKeychain: Keychain = {
   async get(service, account) {
-    const { code, stdout } = await run('security', ['find-generic-password', '-s', service, '-a', account, '-w']);
+    const { code, stdout } = await runHelper('security', ['find-generic-password', '-s', service, '-a', account, '-w']);
     if (code === 44) return null;
     if (code !== 0) throw new Error(`security find-generic-password failed (exit ${code})`);
     // -w prints the password followed by a newline.
@@ -129,7 +58,7 @@ const macKeychain: Keychain = {
   async set(service, account, secret) {
     assertStorable(secret);
     // With -w and no value, security prompts for the password twice on stdin.
-    const { code } = await run(
+    const { code } = await runHelper(
       'security',
       ['add-generic-password', '-s', service, '-a', account, '-U', '-w'],
       `${secret}\n${secret}\n`
@@ -138,7 +67,7 @@ const macKeychain: Keychain = {
   },
 
   async delete(service, account) {
-    const { code } = await run('security', ['delete-generic-password', '-s', service, '-a', account]);
+    const { code } = await runHelper('security', ['delete-generic-password', '-s', service, '-a', account]);
     if (code === 44) return false;
     if (code !== 0) throw new Error(`security delete-generic-password failed (exit ${code})`);
     return true;
@@ -148,7 +77,7 @@ const macKeychain: Keychain = {
 /** Linux Secret Service via secret-tool(1). Exit code 1 from lookup/clear means "no such item". */
 const secretToolKeychain: Keychain = {
   async get(service, account) {
-    const { code, stdout } = await run('secret-tool', ['lookup', 'service', service, 'account', account]);
+    const { code, stdout } = await runHelper('secret-tool', ['lookup', 'service', service, 'account', account]);
     if (code !== 0) return null;
     if (stdout === '') return null;
     return stdout.replace(/\r?\n$/, '');
@@ -156,7 +85,7 @@ const secretToolKeychain: Keychain = {
 
   async set(service, account, secret) {
     assertStorable(secret);
-    const { code } = await run(
+    const { code } = await runHelper(
       'secret-tool',
       ['store', '--label', `${service} (${account})`, 'service', service, 'account', account],
       secret
@@ -165,7 +94,7 @@ const secretToolKeychain: Keychain = {
   },
 
   async delete(service, account) {
-    const { code } = await run('secret-tool', ['clear', 'service', service, 'account', account]);
+    const { code } = await runHelper('secret-tool', ['clear', 'service', service, 'account', account]);
     return code === 0;
   }
 };
