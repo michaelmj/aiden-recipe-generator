@@ -119,8 +119,8 @@ export function registerSheetTools(server: McpServer, dataset: RecipeDataset, sh
       description:
         'Refresh the local cache of community profiles from the configured community sheet. ' +
         'The live sheet is opt-in: without AIDEN_AI_SHEET_CSV_URL there is nothing to sync and the ' +
-        'bundled dataset is the only recipe source. The source URL is set by the operator and cannot ' +
-        'be chosen per call; the response reports which URL was fetched.',
+        'bundled dataset is the only recipe source. The operator picks the source URL, so it is not ' +
+        'a per-call argument; the response says which URL was fetched.',
       inputSchema: {},
       outputSchema: {
         ok: z.boolean(),

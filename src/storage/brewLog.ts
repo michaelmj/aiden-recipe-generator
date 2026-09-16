@@ -71,7 +71,8 @@ export async function logBrew(input: z.input<typeof NewBrewSchema>): Promise<Bre
   const path = await getLogPath();
   return withStoreLock(path, async () => {
     const log = await readLog(path);
-    if (log.entries.length >= MAX_ENTRIES) throw new Error(`Brew log is limited to ${MAX_ENTRIES} entries.`);
+    if (log.entries.length >= MAX_ENTRIES)
+      throw new Error(`The brew log holds ${MAX_ENTRIES} entries; remove some older ones before logging another.`);
     const created = BrewEntrySchema.parse({
       ...entry,
       id: `brew-${Date.now()}-${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`,

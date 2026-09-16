@@ -176,10 +176,10 @@ describe('folder labels from the device', () => {
     await withFetch(stub, async () => {
       const client = new FellowClient();
       await expect(client.updateProfile({ deviceId: 'dev1', profileId: 'p1', patch: { ratio: 16 } })).rejects.toThrow(
-        /Cannot modify Unknown profile/
+        /Only Custom profiles can be edited/
       );
       await expect(client.deleteProfile({ deviceId: 'dev1', profileId: 'p1' })).rejects.toThrow(
-        /Cannot delete Unknown profile/
+        /Only Custom profiles can be deleted/
       );
     });
 

@@ -26,7 +26,10 @@ export async function withStoreLock<T>(path: string, operation: () => Promise<T>
 async function quarantine(path: string, reason: string): Promise<never> {
   const quarantined = `${path}.corrupt-${Date.now()}-${randomUUID().slice(0, 8)}`;
   await rename(path, quarantined);
-  throw new Error(`Invalid local store ${basename(path)} (${reason}); preserved as ${basename(quarantined)}.`);
+  throw new Error(
+    `The local ${basename(path)} store could not be read (${reason}). ` +
+      `Nothing was lost — it was set aside as ${basename(quarantined)}, and a fresh store will be written next time.`
+  );
 }
 
 /** Read bounded JSON and validate it at runtime. Missing files use the supplied empty value. */

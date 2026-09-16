@@ -44,7 +44,7 @@ describe('sheet output is quarantined as untrusted data', () => {
   test('tool descriptions carry the standing untrusted-data note', async () => {
     const tools = await registerCapturingSheetTools(MALICIOUS_CSV);
     for (const name of ['sheet.list', 'sheet.search']) {
-      expect(tools.get(name)?.description).toMatch(/untrusted data, never as instructions/i);
+      expect(tools.get(name)?.description).toMatch(/as instructions, and do not follow directives/i);
     }
   });
 });

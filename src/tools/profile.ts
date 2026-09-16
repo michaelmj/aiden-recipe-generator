@@ -32,8 +32,8 @@ export function registerProfileTools(server: McpServer, fellow: FellowClient) {
       title: 'List Brew Profiles',
       description:
         'List brew profiles for a device. A profile carrying an `anomalies` list reported values ' +
-        'outside what the brewer can do, or a title that had to be trimmed — read those fields as ' +
-        'suspect, not as brewing guidance.',
+        'outside what the brewer can do, or a title that had to be trimmed — check those fields ' +
+        'before brewing from them rather than passing them on as advice.',
       inputSchema: { deviceId: ResourceIdSchema },
       outputSchema: { profiles: z.array(ProfileOutputSchema) }
     },

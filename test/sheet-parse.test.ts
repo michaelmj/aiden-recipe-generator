@@ -26,6 +26,6 @@ describe('community sheet parsing', () => {
   });
 
   test('rejects a sheet with too few rows', async () => {
-    await expect(parseFixture('Recipe,Only One Row\n')).rejects.toThrow(/empty|unexpected/i);
+    await expect(parseFixture('Recipe,Only One Row\n')).rejects.toThrow(/too few rows/i);
   });
 });

@@ -185,14 +185,14 @@ const seg = (value: string) => encodeURIComponent(value);
 function upstreamError(label: string, status: number): Error {
   const hint =
     status === 401 || status === 403
-      ? 'not authorized; run `bun run auth:login` again'
+      ? 'the stored session is no longer valid; run `bun run auth:login` again'
       : status === 404
-        ? 'not found'
+        ? 'Fellow has no such device or profile'
         : status === 429
-          ? 'rate limited by Fellow; retry later'
+          ? 'Fellow is rate limiting this account; wait a moment and retry'
           : status >= 500
-            ? 'Fellow service error; retry later'
-            : 'Fellow rejected the request';
+            ? 'Fellow had a server-side problem; retry in a little while'
+            : 'Fellow did not accept the request';
   return new Error(`${label} failed (${status}): ${hint}.`);
 }
 
@@ -220,7 +220,9 @@ export class FellowClient {
         // The body is not quoted: a login response can echo back the submitted email or password,
         // and a thrown message travels straight into the model's context.
         const reason =
-          res.status === 401 || res.status === 403 ? 'check the email and password' : 'Fellow rejected the login';
+          res.status === 401 || res.status === 403
+            ? 'double-check the email and password'
+            : 'Fellow did not accept the login';
         throw new Error(`Login failed (${res.status}): ${reason}.`);
       }
 
@@ -257,7 +259,8 @@ export class FellowClient {
 
   private async getToken(): Promise<string> {
     const session = await this.store.read();
-    if (!session?.accessToken) throw new Error('Not logged in. Run `bun run auth:login` in a local terminal first.');
+    if (!session?.accessToken)
+      throw new Error('No Fellow session stored yet. Run `bun run auth:login` in a local terminal to sign in.');
 
     // Check if token is expired or about to expire (30s buffer)
     const isExpired = session.accessTokenExpMs && Date.now() > session.accessTokenExpMs - 30_000;
@@ -267,12 +270,12 @@ export class FellowClient {
       try {
         return await this.refreshSession(session);
       } catch {
-        throw new Error('Session expired and refresh failed. Run `bun run auth:login` again.');
+        throw new Error('The Fellow session expired and could not be refreshed. Run `bun run auth:login` again.');
       }
     }
 
     if (isExpired) {
-      throw new Error('Access token expired. Run `bun run auth:login` again.');
+      throw new Error('The Fellow session expired. Run `bun run auth:login` again.');
     }
 
     return session.accessToken;
@@ -436,7 +439,8 @@ export class FellowClient {
    */
   async getProfile(args: { deviceId: string; profileId: string }): Promise<Profile> {
     const profile = (await this.listProfiles(args)).find((p) => p.id === args.profileId);
-    if (!profile) throw new Error(`Profile "${args.profileId}" not found.`);
+    if (!profile)
+      throw new Error(`No profile "${args.profileId}" on this device. List the profiles to see what is there.`);
     return profile;
   }
 
@@ -450,7 +454,11 @@ export class FellowClient {
   /** Update an existing Custom profile (cannot modify Fellow/Drops profiles) */
   async updateProfile(args: { deviceId: string; profileId: string; patch: AidenUpdateProfileInput }) {
     const profile = await this.getProfile(args);
-    if (profile.folder !== 'Custom') throw new Error(`Cannot modify ${profile.folder} profile "${args.profileId}".`);
+    if (profile.folder !== 'Custom')
+      throw new Error(
+        `Only Custom profiles can be edited, and "${args.profileId}" is a ${profile.folder} profile. ` +
+          'Create a Custom copy and change that instead.'
+      );
     return this.requestOptionalJson<Record<string, unknown>>(
       'PATCH',
       `/devices/${seg(args.deviceId)}/profiles/${seg(args.profileId)}`,
@@ -463,7 +471,8 @@ export class FellowClient {
   /** Delete a Custom profile (cannot delete Fellow/Drops profiles) */
   async deleteProfile(args: { deviceId: string; profileId: string }) {
     const profile = await this.getProfile(args);
-    if (profile.folder !== 'Custom') throw new Error(`Cannot delete ${profile.folder} profile "${args.profileId}".`);
+    if (profile.folder !== 'Custom')
+      throw new Error(`Only Custom profiles can be deleted, and "${args.profileId}" is a ${profile.folder} profile.`);
     await this.requestVoid('DELETE', `/devices/${seg(args.deviceId)}/profiles/${seg(args.profileId)}`);
     return { ok: true };
   }

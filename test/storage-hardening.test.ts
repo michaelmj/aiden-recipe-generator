@@ -36,7 +36,7 @@ describe('hardened local stores', () => {
     const dir = freshDataDir();
     const path = join(dir, 'brew-log.json');
     writeFileSync(path, '{partial', { mode: 0o600 });
-    await expect(getRecentBrews()).rejects.toThrow(/preserved as brew-log\.json\.corrupt-/);
+    await expect(getRecentBrews()).rejects.toThrow(/set aside as brew-log\.json\.corrupt-/);
     expect(readdirSync(dir).some((name) => name.startsWith('brew-log.json.corrupt-'))).toBe(true);
     expect(() => readFileSync(path)).toThrow();
 

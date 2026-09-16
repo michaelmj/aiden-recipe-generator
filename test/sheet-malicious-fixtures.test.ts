@@ -103,7 +103,7 @@ describe('CSV bombs (nh5.4, nh5.6)', () => {
   test('an unterminated quote cannot swallow the sheet into one giant cell', async () => {
     // The opening quote in the header eats every following line, so the sheet collapses to a
     // single record instead of a grid — it is refused rather than parsed into one huge profile.
-    await expect(profilesFrom(fixture('sheet-csv-bomb.csv'))).rejects.toThrow(/empty\/unexpected/i);
+    await expect(profilesFrom(fixture('sheet-csv-bomb.csv'))).rejects.toThrow(/too few rows/i);
   });
 
   test('a quote bomb big enough to matter trips the record cap before it is buffered', async () => {
@@ -146,7 +146,7 @@ describe('an HTML page served as the sheet (nh5.4)', () => {
       respondWith(() => csvResponse(fixture('sheet-html-error.csv'))),
       async () => {
         const store = freshStore();
-        await expect(store.sync({})).rejects.toThrow(/no usable profiles/i);
+        await expect(store.sync({})).rejects.toThrow(/no usable recipes/i);
         expect(await store.getProfiles()).toEqual([]);
       }
     );
@@ -167,7 +167,7 @@ describe('an HTML page served as the sheet (nh5.4)', () => {
     await withFetch(
       respondWith(() => csvResponse(fixture('sheet-html-error.csv'))),
       async () => {
-        await expect(store.sync({})).rejects.toThrow(/no usable profiles/i);
+        await expect(store.sync({})).rejects.toThrow(/no usable recipes/i);
       }
     );
     expect(await store.getProfiles()).toEqual(good);

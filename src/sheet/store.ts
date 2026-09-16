@@ -80,7 +80,7 @@ export function parseProfileCells(csv: string): Record<string, string>[] {
     to: SHEET_MAX_ROWS + 1
   }) as string[][];
 
-  if (rows.length < 3) throw new Error('Sheet CSV looks empty/unexpected.');
+  if (rows.length < 3) throw new Error('The sheet CSV had too few rows to hold a recipe; check the sheet URL.');
   if (rows.length > SHEET_MAX_ROWS) {
     throw new Error(`Sheet CSV has more than ${SHEET_MAX_ROWS} rows.`);
   }
@@ -278,7 +278,7 @@ export class SheetProfileStore {
       url = fetched.url;
 
       if (!fetched.res.ok) {
-        throw new Error(`Failed to fetch sheet CSV (${fetched.res.status}).`);
+        throw new Error(`The sheet host answered ${fetched.res.status}, so the CSV could not be fetched.`);
       }
 
       assertParseableContentType(fetched.res);
@@ -293,7 +293,7 @@ export class SheetProfileStore {
     // an empty one and take the recipe source dark until the next successful sync, so treat an
     // empty parse as a failed sync: leave the cache alone and let the caller hear about it.
     if (profiles.length === 0) {
-      throw new Error('Sheet CSV yielded no usable profiles; keeping the previous cache.');
+      throw new Error('The sheet CSV held no usable recipes, so the previous cache was kept.');
     }
 
     const cache: Cache = { cachedAtMs: Date.now(), csvUrl: url, profiles };
