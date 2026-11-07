@@ -8,14 +8,34 @@
 
 import { APP_ID, getMcpHttpPort } from '@/config';
 import { type RunningHttpServer, startHttpServer } from '@/httpServer';
+import { createServices, type Services } from '@/server';
 
 let running: RunningHttpServer | undefined;
 
+/** One line on stderr saying whether tool calls will find a Fellow session. Never throws. */
+async function describeFellowLogin(services: Services): Promise<string> {
+  try {
+    const status = await services.fellow.status();
+    if (status.loggedIn) {
+      const renew = status.autoReconnectSource ? `, auto-reconnect via ${status.autoReconnectSource}` : '';
+      return `Fellow login OK (${status.email ?? 'unknown account'}${renew})`;
+    }
+    if (status.autoReconnect) {
+      return 'Fellow: no session stored yet; will sign in from the environment credentials on the first tool call';
+    }
+    return 'Fellow: NOT logged in. Run `bun run auth:login`, or start with `bun run serve` so 1Password supplies the credentials';
+  } catch (err) {
+    return `Fellow: could not read the stored session (${err instanceof Error ? err.message : String(err)})`;
+  }
+}
+
 async function start() {
-  running = await startHttpServer({ port: getMcpHttpPort() });
+  const services = createServices();
+  running = await startHttpServer({ port: getMcpHttpPort(), services });
   console.error(`${APP_ID} running (http) at ${running.url}`);
   // The path, never the token itself.
   console.error(`Bearer token written to ${running.tokenPath} (rotated on every start)`);
+  console.error(await describeFellowLogin(services));
 }
 
 let isShuttingDown = false;
