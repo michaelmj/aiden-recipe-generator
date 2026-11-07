@@ -54,7 +54,9 @@ if ! op_err="$("$op_bin" run --env-file="$env_file" -- true 2>&1 >/dev/null)"; t
     printf '       Check that op is signed in from this terminal (op vault list), that the\n'
     printf '       1Password app has "Integrate with 1Password CLI" enabled, and that every\n'
     printf '       op:// reference in the env file exists. If this terminal cannot reach\n'
-    printf '       1Password at all, run this script from another one (e.g. Terminal.app).\n'
+    printf '       the 1Password app, sign op in manually first:\n'
+    printf '         eval $(op signin --account <account>)\n'
+    printf '       or run this script from another terminal (e.g. Terminal.app).\n'
   } >&2
   exit 1
 fi
