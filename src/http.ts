@@ -14,6 +14,8 @@ let running: RunningHttpServer | undefined;
 async function start() {
   running = await startHttpServer({ port: getMcpHttpPort() });
   console.error(`${APP_ID} running (http) at ${running.url}`);
+  // The path, never the token itself.
+  console.error(`Bearer token written to ${running.tokenPath} (rotated on every start)`);
 }
 
 let isShuttingDown = false;

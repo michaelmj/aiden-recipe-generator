@@ -6,8 +6,9 @@
  * share one `Services` object (one Fellow session, one dataset, one sheet cache), and warm-up runs
  * once per process rather than once per session.
  *
- * The listener only ever binds MCP_HTTP_HOST (127.0.0.1). Authentication and Host/Origin checks
- * are layered on in aiden-recipe-generator-m6i.2; until then any local process can reach /mcp.
+ * The listener only ever binds MCP_HTTP_HOST (127.0.0.1). Every request, on every path, must
+ * pass the Host/Origin and bearer-token checks in httpAuth.ts (aiden-recipe-generator-m6i.2)
+ * before anything else looks at it.
  */
 
 import { randomUUID } from 'node:crypto';
@@ -19,6 +20,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 
 import { MCP_HTTP_HOST, MCP_HTTP_MAX_BODY_BYTES } from '@/config';
+import { AccessDenied, assertAuthorized, generateHttpToken, writeHttpTokenFile } from '@/httpAuth';
 import { createMcpServer, createServices, type Services, warmUp } from '@/server';
 
 export const MCP_PATH = '/mcp';
@@ -30,6 +32,11 @@ export interface HttpServerOptions {
   services?: Services;
   /** Run the recipe-source warm-up after listening. Default true. */
   warmUp?: boolean;
+  /**
+   * Bearer token clients must present. When omitted, a fresh one is generated and written 0600
+   * to the app data dir (see httpAuth.ts), replacing the previous start's token.
+   */
+  token?: string;
 }
 
 export interface RunningHttpServer {
@@ -37,6 +44,8 @@ export interface RunningHttpServer {
   port: number;
   /** Base URL of the MCP endpoint. */
   url: string;
+  /** Where the generated token was written; undefined when the caller supplied `token`. */
+  tokenPath?: string;
   /** Number of live MCP sessions. */
   sessionCount(): number;
   /** Close every session, then stop listening. */
@@ -92,6 +101,9 @@ function headerValue(req: IncomingMessage, name: string): string | undefined {
 export async function startHttpServer(options: HttpServerOptions): Promise<RunningHttpServer> {
   const services = options.services ?? createServices();
   const sessions = new Map<string, Session>();
+  const token = options.token ?? generateHttpToken();
+  // Bound port, set once listening; requests cannot arrive before then.
+  let boundPort = 0;
 
   async function openSession(req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
     const server = createMcpServer(services);
@@ -111,6 +123,7 @@ export async function startHttpServer(options: HttpServerOptions): Promise<Runni
   }
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    assertAuthorized(req, boundPort, token);
     const path = new URL(req.url ?? '/', 'http://localhost').pathname;
     if (path !== MCP_PATH) throw new HttpError(404, 'Not found');
 
@@ -137,6 +150,11 @@ export async function startHttpServer(options: HttpServerOptions): Promise<Runni
 
   const httpServer: Server = createServer((req, res) => {
     handle(req, res).catch((err) => {
+      if (err instanceof AccessDenied) {
+        if (err.status === 401) res.setHeader('www-authenticate', 'Bearer realm="aiden"');
+        sendJsonRpcError(res, err.status, err.message);
+        return;
+      }
       if (err instanceof HttpError) {
         sendJsonRpcError(res, err.status, err.message);
         return;
@@ -167,12 +185,23 @@ export async function startHttpServer(options: HttpServerOptions): Promise<Runni
   });
 
   const port = (httpServer.address() as AddressInfo).port;
+  boundPort = port;
+  let tokenPath: string | undefined;
+  if (options.token === undefined) {
+    try {
+      tokenPath = await writeHttpTokenFile(token);
+    } catch (err) {
+      httpServer.close();
+      throw err;
+    }
+  }
   if (options.warmUp !== false) warmUp(services);
 
   let closing: Promise<void> | undefined;
   return {
     port,
     url: `http://${MCP_HTTP_HOST}:${port}${MCP_PATH}`,
+    tokenPath,
     sessionCount: () => sessions.size,
     close() {
       closing ??= (async () => {

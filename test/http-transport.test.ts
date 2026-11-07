@@ -23,11 +23,14 @@ const loopbackFetch = ((input: string | URL | Request, init?: RequestInit) => {
   return Bun.fetch(input, init);
 }) as typeof fetch;
 
+const TOKEN = 'test-token-for-http-transport';
+const AUTH = { authorization: `Bearer ${TOKEN}` };
+
 let running: RunningHttpServer;
 
 beforeAll(async () => {
   freshDataDir();
-  running = await startHttpServer({ port: 0, warmUp: false });
+  running = await startHttpServer({ port: 0, warmUp: false, token: TOKEN });
 });
 
 afterAll(async () => {
@@ -35,7 +38,10 @@ afterAll(async () => {
 });
 
 async function connect(): Promise<{ client: Client; transport: StreamableHTTPClientTransport }> {
-  const transport = new StreamableHTTPClientTransport(new URL(running.url), { fetch: loopbackFetch });
+  const transport = new StreamableHTTPClientTransport(new URL(running.url), {
+    fetch: loopbackFetch,
+    requestInit: { headers: AUTH }
+  });
   const client = new Client({ name: 'http-transport-test', version: '0.0.0' });
   await client.connect(transport);
   return { client, transport };
@@ -83,7 +89,12 @@ describe('HTTP MCP entry', () => {
     const post = (path: string, body: unknown, headers: Record<string, string> = {}) =>
       loopbackFetch(new URL(path, running.url), {
         method: 'POST',
-        headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', ...headers },
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json, text/event-stream',
+          ...AUTH,
+          ...headers
+        },
         body: JSON.stringify(body)
       });
     const list = { jsonrpc: '2.0', id: 1, method: 'tools/list' };
@@ -91,7 +102,7 @@ describe('HTTP MCP entry', () => {
     expect((await post('/mcp', list)).status).toBe(400);
     expect((await post('/mcp', list, { 'mcp-session-id': 'nope' })).status).toBe(404);
     expect((await post('/other', list)).status).toBe(404);
-    const bad = await loopbackFetch(running.url, { method: 'POST', body: '{not json' });
+    const bad = await loopbackFetch(running.url, { method: 'POST', headers: AUTH, body: '{not json' });
     expect(bad.status).toBe(400);
   });
 
