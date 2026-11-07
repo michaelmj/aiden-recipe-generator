@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "aiden": {
+      "type": "http",
+      "url": "http://127.0.0.1:${AIDEN_AI_MCP_PORT:-47831}/mcp",
+      "headersHelper": "scripts/mcp-headers.sh"
+    }
+  }
+}
