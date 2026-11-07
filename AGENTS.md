@@ -31,6 +31,7 @@ When the user asks to brew coffee or shows a coffee bag photo:
 
 **Auth & Device:**
 - `auth.status` - Check Fellow login; if needed, ask the user to run `bun run auth:login` locally
+- If the aiden tools are missing or fail to connect, the HTTP server is not running: ask the user to run `bun run serve` in their own terminal, then reconnect with `/mcp`. Never start it yourself; it needs the user's 1Password session
 - `aiden.listDevices` - Get connected Aidens
 - `aiden.listProfiles` - Profiles on device
 - `aiden.createProfile` / `aiden.updateProfile` - Create/modify profiles

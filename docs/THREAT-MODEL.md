@@ -1,6 +1,8 @@
 # Threat Model — Aiden Recipe Generator MCP Server
 
-Scope: the stdio MCP server in `src/`. Tracked by epic `aiden-recipe-generator-nh5`.
+Scope: the MCP server in `src/`, over both transports — the loopback Streamable HTTP entry
+(`src/http.ts`, the default since epic `aiden-recipe-generator-m6i`) and the stdio entry
+(`src/index.ts`). Tracked by epic `aiden-recipe-generator-nh5`; the HTTP surface by `m6i`.
 
 ## Trust boundary in one sentence
 
@@ -15,6 +17,7 @@ it is no longer the default recipe source.
 | Fellow session (access + refresh JWT, email) | AES-256-GCM in `~/.aiden-ai-profile-generator/session.enc.json`, key in the OS keychain; without a keychain helper the write is **refused** unless `AIDEN_AI_ALLOW_PLAINTEXT_SESSION` is set, which downgrades it to plaintext `session.json` mode 0600 and warns on every write (`src/fellow/session.ts`, `src/fellow/keychain.ts`) | Full control of the user's Fellow account |
 | The agent's context window | every tool response | Text placed here steers subsequent tool calls |
 | The physical brewer | `aiden.createProfile` / `aiden.updateProfile` | Heats water; parameters come from the agent |
+| HTTP bearer token | `~/.aiden-ai-profile-generator/http-token`, mode 0600, regenerated on every start (`src/httpAuth.ts`) | Anyone holding it can call every tool, including profile writes, until the server restarts |
 | Local brew history / settings | `~/.aiden-ai-profile-generator/*.json` (`src/storage/`) | Low value, but a persistence foothold |
 
 Local-store runtime validation, size limits, text neutralization, serialized atomic writes,
@@ -66,6 +69,35 @@ The login body also carries an IANA timezone, which tells Fellow where the accou
 from. It is taken from the host running the login (`AIDEN_AI_LOGIN_TIMEZONE` or the `timezone`
 argument override it) and validated as a zone name. There is no fixed regional default: an
 unresolvable host zone fails the login rather than reporting an unrelated region to Fellow.
+
+## Loopback HTTP surface
+
+The default launch is a long-lived process started by the operator (`bun run serve`, which wraps
+`src/http.ts` in `op run`) that MCP clients connect to at `http://127.0.0.1:<port>/mcp`. That
+splits secret handling from the client: 1Password is consulted once, in a terminal the operator
+chose, and the MCP host never holds or launches anything with Fellow credentials. The price is a
+listening socket, which stdio never had. Anything on the machine can open a TCP connection to it,
+and so can a web page, by rebinding its own hostname to 127.0.0.1.
+
+Controls, all in `src/httpServer.ts` and `src/httpAuth.ts`, applied to every request on every
+path before any MCP handling:
+
+| Threat | Control |
+|---|---|
+| LAN or remote clients | Listener binds `127.0.0.1` only; `MCP_HTTP_HOST` is a constant with no env override |
+| DNS rebinding from a browser page | `Host` must be exactly `127.0.0.1:<port>` or `localhost:<port>`, and any `Origin` must be the same loopback origin, else 403. Checked before the token, so a rebinding page gets 403 with or without a guess |
+| Other local processes and users | `Authorization: Bearer <token>`, 256 random bits per start, compared in constant time (via SHA-256 digests, so length does not leak), else 401. The token file is 0600 in a 0700 directory, written to a temp file and renamed so it is never briefly readable or half-written, and only written after the port binds, so a failed second start cannot overwrite a running server's token |
+| Token in client config | Never stored there. Claude Code's `.mcp.json` names a `headersHelper` (`scripts/mcp-headers.sh`) that reads the token file at connect time and refuses to emit anything that is not a base64url token |
+| Token in logs | Only the token file's path is logged; request logs carry the path, never headers |
+| Oversized or malformed requests | Bodies over 1 MB get 413 before parsing; non-JSON gets 400; unknown session ids get 404 |
+| Cross-session interference | Sessions are independent MCP servers over one shared `Services` object. Token refresh and cold-start login are single-flight, local stores are serialized and atomically replaced, and the sheet cache now is too (`m6i.5`). Proposal approvals are shared state on purpose: a proposal previewed in one session can be applied from another, still bound to its content hash |
+
+What it does not cover: a process running as the same user can read the token file, exactly as
+it can read the session file and the keychain-backed key — that is the hostile local operator
+non-goal below, not a new hole. Locks are per process, so running the stdio and HTTP entries at
+the same time against one data dir can still race a token refresh; run one or the other. Sessions
+are not yet reaped when a client vanishes without `DELETE` (`m6i.8`), which costs memory, not
+access.
 
 ## Recipe sources and what each is worth
 
@@ -158,6 +190,7 @@ documenting what another would mean. Both were previously bounded by guesses (`p
 | The brewer | `aiden.createProfile` / `updateProfile` → `src/schemas.ts` | Schema accepts any positive `bloomTemperature` and unbounded pulse arrays |
 | Fellow API path | `new URL(FELLOW_API_BASE + path)` (`src/fellow/client.ts:217`) | `deviceId` / `profileId` interpolated raw; `..`, `?`, `#` reshape the authenticated request |
 | stderr / error strings | `text.slice(0, 500)` and `slice(0, 1000)` (`src/fellow/client.ts:118,241`) | Upstream body returned into agent context |
+| Local HTTP listener | `127.0.0.1:<port>/mcp` (`src/httpServer.ts`) | Every tool, reachable by any local process or rebinding page that gets past Host/Origin and the bearer token |
 | Process availability | `await ensureCached()` before `server.connect()` (`src/index.ts:35`) | A stalling sheet host prevents the server from starting |
 
 ## The two attacks worth defending
@@ -175,7 +208,11 @@ the sink (`.9`) is the control that does not depend on the agent behaving.
 ## Non-goals
 
 - Blocking egress to the Fellow API (S3) — required for the product to work.
-- Defending against a hostile local operator, or against Fellow itself.
+- Defending against a hostile local operator, or against Fellow itself. That includes other
+  processes running as the operator's uid: they can read the HTTP token, the session file and
+  the keychain alike.
+- Claude Desktop over HTTP. It does not connect to a local plain-HTTP server directly; bridging
+  it with `mcp-remote` or similar is possible but untested here and out of scope.
 - Verifying JWT signatures; `decodeJwtExpMs` (`src/fellow/session.ts`) reads `exp` for scheduling
   only and is documented as unverified.
 
@@ -198,3 +235,8 @@ the sink (`.9`) is the control that does not depend on the agent behaving.
 | API path segment injection | `nh5.15` |
 | Dependency tree and install policy | `nh5.11`, `nh5.12`, `nh5.13` |
 | Offline regression fixtures | `nh5.14` |
+| Loopback-only HTTP transport | `m6i.1` |
+| HTTP bearer token, Host/Origin (DNS rebinding) | `m6i.2` |
+| Concurrent-session state (refresh, stores, sheet cache) | `m6i.5` |
+| HTTP contract and rejection tests | `m6i.6` |
+| Idle HTTP session reaping | `m6i.8` |

@@ -107,40 +107,26 @@ long-lived is written to this machine's disk at all. Store your Fellow login in 
 *references* — not secrets — in an env file:
 
 ```bash
+cp fellow.env.example fellow.env   # then edit the op:// references to match your vault
+```
+
+```bash
 # fellow.env — safe to keep next to the project; it contains pointers, not passwords
-AIDEN_AI_FELLOW_EMAIL=you@example.com
+AIDEN_AI_FELLOW_EMAIL=op://Private/Fellow/username
 AIDEN_AI_FELLOW_PASSWORD=op://Private/Fellow/password
 ```
 
-Launch the server through [`op run`](https://1password.com/blog/securing-mcp-servers-with-1password-stop-credential-exposure-in-your-agent),
-which resolves the references, sets them for that process only, and drops them when it exits:
-
-```bash
-op run --env-file=fellow.env -- bun run /absolute/path/to/aiden-recipe-generator/src/index.ts
-```
-
-In an MCP client config, `op` becomes the command and the server becomes its arguments:
-
-```json
-{
-  "mcpServers": {
-    "aiden": {
-      "command": "/opt/homebrew/bin/op",
-      "args": [
-        "run", "--env-file=/absolute/path/to/fellow.env", "--",
-        "bun", "run", "/absolute/path/to/aiden-recipe-generator/src/index.ts"
-      ]
-    }
-  }
-}
-```
+`bun run serve` (next step) launches the server through
+[`op run`](https://1password.com/blog/securing-mcp-servers-with-1password-stop-credential-exposure-in-your-agent),
+which resolves the references, sets them for that process only, and drops them when it exits. The
+MCP client never touches 1Password: it connects to the already-running server.
 
 With this set up, `bun run auth:login` becomes optional: a server that starts with no session at all
 signs itself in, and one whose refresh token has died signs in again. Only tokens are ever stored.
 
 If you would rather the password not sit in the process environment for the server's whole life,
-leave the `op://` reference **unresolved** — set `AIDEN_AI_FELLOW_PASSWORD=op://...` directly in the
-MCP client's `"env"` block and skip the `op run` wrapper. The server then shells out to `op read` at
+leave the `op://` reference **unresolved** — export `AIDEN_AI_FELLOW_PASSWORD=op://...` and start with
+`bun run serve:plain` (or put it in a stdio client's `"env"` block) instead of the `op run` wrapper. The server then shells out to `op read` at
 the moment a re-login needs it, so the secret exists in memory for a few milliseconds instead of for
 days. That path needs `op` on `PATH` and a non-interactive session — an
 [OP_SERVICE_ACCOUNT_TOKEN](https://developer.1password.com/docs/service-accounts/) — because a
@@ -168,27 +154,79 @@ is no OS keychain to encrypt it under, and it is never sent to the MCP host or t
 the password (`autoReconnectSource`: `environment` or `stored-password`). When both are configured
 the environment wins, and the stored password is dropped on the next sign-in.
 
-### 4. Connect your MCP client
+### 4. Start the server
 
-If you set up the 1Password route above, the command the client runs is `op run` with the server as
-its arguments — see [Log in to Fellow](#3-log-in-to-fellow) for both forms. Otherwise the server is
-launched directly, as below.
-
-**Claude Code** — the `--` matters, everything after it is the command to run:
+The server runs as its own long-lived process on loopback HTTP, and MCP clients connect to it.
+Start it in a terminal and leave it running:
 
 ```bash
-claude mcp add aiden -- bun run /absolute/path/to/aiden-recipe-generator/src/index.ts
-
-# or, with 1Password supplying the Fellow password:
-claude mcp add aiden -- op run --env-file=/absolute/path/to/fellow.env -- \
-  bun run /absolute/path/to/aiden-recipe-generator/src/index.ts
+bun run serve          # with 1Password: op run --env-file=fellow.env -- bun src/http.ts
+bun run serve:plain    # without: uses the session from `bun run auth:login`, or env vars you export
 ```
 
-Add `-s user` to make it available in every project instead of just the current one. Restart
-Claude Code, then `claude mcp list` should show `aiden` connected.
+```text
+aiden-ai-profile-generator running (http) at http://127.0.0.1:47831/mcp
+Bearer token written to ~/.aiden-ai-profile-generator/http-token (rotated on every start)
+Loaded 13 bundled recipes
+Fellow login OK (you@example.com, auto-reconnect via environment)
+```
 
-**Claude Desktop, Cursor, or any client with a JSON config** — add a stdio server. Claude Desktop
-reads `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) and Cursor reads
+`bun run serve` first resolves every reference in `fellow.env` once and exits with an explanation if
+`op` is signed out or cannot reach the 1Password app, so a broken vault never gets as far as a
+half-started server. Run it from a terminal that `op` works in — that is the only place 1Password
+needs to be reachable. Ctrl-C stops the server.
+
+The listener binds `127.0.0.1` only and refuses every request without the per-start bearer token,
+or with a foreign `Host`/`Origin` (which is what stops a web page reaching it through DNS
+rebinding). See [docs/THREAT-MODEL.md](docs/THREAT-MODEL.md#loopback-http-surface).
+
+| Variable | Effect |
+|---|---|
+| `AIDEN_AI_MCP_PORT` | Port to listen on (default `47831`). Set it for Claude Code too: `.mcp.json` reads the same variable |
+| `AIDEN_AI_ENV_FILE` | Env file of `op://` references for `bun run serve` (default `fellow.env` in the repo) |
+| `OP_BIN` | Path to `op` when it is not on `PATH` (Homebrew and `/usr/local/bin` are tried anyway) |
+
+### 5. Connect your MCP client
+
+**Claude Code** — nothing to add. The repo ships a project-scoped [`.mcp.json`](.mcp.json):
+
+```json
+{
+  "mcpServers": {
+    "aiden": {
+      "type": "http",
+      "url": "http://127.0.0.1:${AIDEN_AI_MCP_PORT:-47831}/mcp",
+      "headersHelper": "scripts/mcp-headers.sh"
+    }
+  }
+}
+```
+
+It holds no secret. [`scripts/mcp-headers.sh`](scripts/mcp-headers.sh) reads the token the server
+just wrote and hands Claude the `Authorization` header when it connects. Start the server, then
+open Claude Code in this directory and approve the project server when asked (or later, under
+`/mcp`). `claude mcp list` should show `aiden: http://127.0.0.1:47831/mcp (HTTP) - ✔ Connected`.
+
+If you registered `aiden` before (the old stdio setup), remove those entries, or the local one wins
+over the project one and Claude warns about conflicting scopes:
+
+```bash
+claude mcp remove aiden -s local
+claude mcp remove aiden -s user
+```
+
+To use the server from other projects too, register it once at user scope with an absolute helper
+path:
+
+```bash
+claude mcp add-json -s user aiden \
+  '{"type":"http","url":"http://127.0.0.1:47831/mcp","headersHelper":"/absolute/path/to/aiden-recipe-generator/scripts/mcp-headers.sh"}'
+```
+
+**Claude Desktop, Cursor, or any client that launches stdio servers** — the token rotates on every
+server start, so a static header in a JSON config would go stale. Those clients use the stdio entry
+instead, which they launch themselves. Claude Desktop reads
+`~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) and Cursor reads
 `~/.cursor/mcp.json` or `.cursor/mcp.json` in a project:
 
 ```json
@@ -202,16 +240,19 @@ reads `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) 
 }
 ```
 
-Use an absolute path to `bun` (`which bun`, often `/opt/homebrew/bin/bun`) — and to `op`, if you
-wrap the launch in it — when the client starts with a minimal `PATH` and reports that the command
-was not found. Environment overrides from
-[Storage and environment](#storage-and-environment) go in an `"env": { ... }` object here, or after
-`-e` on the `claude mcp add` line.
+For 1Password on that path, `op` becomes the command and the server its arguments
+(`"command": "/opt/homebrew/bin/op", "args": ["run", "--env-file=/absolute/path/to/fellow.env", "--",
+"bun", "run", "/absolute/path/to/aiden-recipe-generator/src/index.ts"]`) — which means the client
+itself needs 1Password access on every launch, the cost the HTTP path exists to avoid. Use absolute
+paths to `bun` and `op` (`which bun`, often `/opt/homebrew/bin/bun`) when the client starts with a
+minimal `PATH`. Environment overrides from [Storage and environment](#storage-and-environment) go in
+an `"env": { ... }` object. Claude Desktop could reach the HTTP server through a bridge such as
+`mcp-remote`, but that is untested here.
 
-### 5. Verify it works
+### 6. Verify it works
 
 Ask your client something that needs the server, for example *"list my Aiden devices"*, and it
-should call `aiden.listDevices` and name your brewer. To check the server itself without a client,
+should call `aiden.listDevices` and name your brewer. To check the stdio entry without a client,
 speak MCP to it directly:
 
 ```bash
@@ -226,7 +267,7 @@ It prints `aiden-ai-profile-generator running (stdio)` plus the bundled recipe c
 a JSON response with `"loggedIn": true` once step 3 succeeded. The process stays attached to stdio —
 press Ctrl-C to exit.
 
-### 6. First brew
+### 7. First brew
 
 Show your client a photo of a coffee bag, or just name the coffee, and ask it to build a recipe.
 It follows the workflow in [AGENTS.md](AGENTS.md): research first, then a profile. Profile writes
@@ -239,12 +280,13 @@ After tasting, tell it what you thought — feedback is logged and used to rank 
 ### Storage and environment
 
 Everything local lives in `~/.aiden-ai-profile-generator`: the encrypted session
-(`session.enc.json`), brew log, user settings, cached sheet profiles, and pending proposal
-approvals. Details in [docs/LOCAL-STORAGE.md](docs/LOCAL-STORAGE.md).
+(`session.enc.json`), the HTTP bearer token (`http-token`), brew log, user settings, cached sheet
+profiles, and pending proposal approvals. Details in [docs/LOCAL-STORAGE.md](docs/LOCAL-STORAGE.md).
 
 | Variable | Effect |
 |---|---|
 | `AIDEN_AI_DATA_DIR` | Move that directory somewhere else |
+| `AIDEN_AI_MCP_PORT` | Port for the HTTP server and for `.mcp.json` (default `47831`) |
 | `AIDEN_AI_LOGIN_TIMEZONE` | Send an explicit IANA zone at login instead of the host's |
 | `AIDEN_AI_FELLOW_EMAIL` | Fellow account to sign in as when credentials come from the environment |
 | `AIDEN_AI_FELLOW_PASSWORD` | The password, or an `op://vault/item/field` reference resolved through the 1Password CLI when it is needed (see [Log in to Fellow](#3-log-in-to-fellow)) |
@@ -263,7 +305,13 @@ tokens end up readable in a file.
 
 | Symptom | Cause |
 |---|---|
-| Client shows the server as failed or disconnected | `bun` not on the client's `PATH`, or a relative path in the config — use absolute paths for both |
+| Claude Code shows `aiden` failed, or `aiden: no token at … Start the server first` | The server is not running. Start `bun run serve`, then `/mcp` → `aiden` → Reconnect |
+| Tools stop working with `401` after restarting the server | Every start rotates the token, and an open session keeps the old one. `/mcp` → Reconnect picks up the new token |
+| `Port 47831 on 127.0.0.1 is already in use` | Another aiden server is running (`lsof -iTCP:47831 -sTCP:LISTEN`). Stop it, or set `AIDEN_AI_MCP_PORT` for both the server and Claude Code |
+| `serve: 1Password could not resolve the references` | `op` is signed out, or this terminal cannot reach the 1Password app. Check `op vault list` and *Integrate with 1Password CLI* in 1Password's Developer settings; if this terminal is blocked from 1Password, run `bun run serve` from another one (e.g. Terminal.app) |
+| `serve: 1Password CLI (op) not found` | Install the 1Password CLI, set `OP_BIN`, or use `bun run serve:plain` |
+| `Conflicting scopes` warning for `aiden` | An old stdio registration shadows `.mcp.json`; `claude mcp remove aiden -s local` (and `-s user`) |
+| A stdio client shows the server as failed or disconnected | `bun` not on the client's `PATH`, or a relative path in the config — use absolute paths for both |
 | `auth.status` reports `loggedIn: false` | `bun run auth:login` has not run, or it ran with a different `AIDEN_AI_DATA_DIR` than the server sees |
 | `A local interactive TTY is required` | `auth:login` was piped or run inside an agent session; run it in a real terminal |
 | `Fellow rejected the credentials supplied through AIDEN_AI_FELLOW_PASSWORD` | Wrong secret in the vault, or the wrong `AIDEN_AI_FELLOW_EMAIL`. They are tried once per process, so restart the server after fixing them |
