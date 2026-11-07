@@ -7,7 +7,7 @@
  * host-checked and the profiles stay labelled untrusted all the way out to the agent.
  */
 
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parse } from 'csv-parse/sync';
 import {
@@ -23,6 +23,7 @@ import {
 } from '@/config';
 import { type SanitizedSheetProfile, sanitizeProfile } from '@/sheet/sanitize';
 import { assertAllowedSheetUrl } from '@/sheet/url';
+import { atomicWriteStore } from '@/storage/jsonStore';
 
 /** A profile from the community Google Sheet */
 export type SheetProfile = {
@@ -198,12 +199,23 @@ async function readCappedText(res: Response, limitBytes: number): Promise<string
  * Manages fetching and caching community profiles from Google Sheets.
  * Cache TTL defaults to 6 hours.
  */
+export interface SyncResult {
+  ok: true;
+  csvUrl: string;
+  profileCount: number;
+}
+
 export class SheetProfileStore {
   private csvUrl: string | undefined;
   private cacheTtlMs: number;
   private timeoutMs: number;
   private cachePath = join(getAppDataDir(), 'sheetProfiles.json');
   private warmup: Promise<void> | null = null;
+  /**
+   * The sync in flight, keyed by target URL. The HTTP entry serves several MCP sessions from one
+   * process, so two sessions calling sheet.sync at once share one fetch and one cache write.
+   */
+  private syncInFlight: { target: string; promise: Promise<SyncResult> } | null = null;
 
   constructor(opts?: { csvUrl?: string; cacheTtlMs?: number; timeoutMs?: number }) {
     this.csvUrl = opts?.csvUrl ?? getSheetCsvUrl();
@@ -256,16 +268,28 @@ export class SheetProfileStore {
     }
   }
 
-  /** Fetch fresh data from the sheet and update cache */
-  async sync({ csvUrl }: { csvUrl?: string }) {
+  /** Fetch fresh data from the sheet and update cache. Concurrent calls for one URL share a fetch. */
+  sync({ csvUrl }: { csvUrl?: string }): Promise<SyncResult> {
     const target = csvUrl ?? this.csvUrl;
     if (!target) {
-      throw new Error(
-        'No community sheet is configured. Set AIDEN_AI_SHEET_CSV_URL to opt into the live sheet; ' +
-          'the bundled dataset is the default recipe source.'
+      return Promise.reject(
+        new Error(
+          'No community sheet is configured. Set AIDEN_AI_SHEET_CSV_URL to opt into the live sheet; ' +
+            'the bundled dataset is the default recipe source.'
+        )
       );
     }
+    const existing = this.syncInFlight;
+    if (existing?.target === target) return existing.promise;
 
+    const promise = this.fetchAndCache(target).finally(() => {
+      if (this.syncInFlight?.promise === promise) this.syncInFlight = null;
+    });
+    this.syncInFlight = { target, promise };
+    return promise;
+  }
+
+  private async fetchAndCache(target: string): Promise<SyncResult> {
     // One deadline covers the redirect chain and the body read: a response that trickles forever
     // would otherwise hang start(), which awaits ensureCached() before the transport connects.
     const controller = new AbortController();
@@ -298,10 +322,11 @@ export class SheetProfileStore {
 
     const cache: Cache = { cachedAtMs: Date.now(), csvUrl: url, profiles };
 
-    await mkdir(getAppDataDir(), { recursive: true });
-    await writeFile(this.cachePath, JSON.stringify(cache, null, 2), 'utf8');
+    // Atomic replace: a session reading the cache mid-write must see the old file or the new one,
+    // never a torn one that readCache() would drop as missing.
+    await atomicWriteStore(this.cachePath, cache);
 
-    return { ok: true, csvUrl: url, profileCount: profiles.length };
+    return { ok: true as const, csvUrl: url, profileCount: profiles.length };
   }
 
   /** Get cached profiles */
