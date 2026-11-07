@@ -10,7 +10,9 @@
   },
   "scripts": {
     "dev": "bun --watch src/index.ts",
+    "dev:http": "bun --watch src/http.ts",
     "start": "bun dist/index.js",
+    "start:http": "bun dist/http.js",
     "auth:login": "bun src/cli/login.ts",
     "build": "bunx tsc -p tsconfig.json",
     "typecheck": "bunx tsc -p tsconfig.json --noEmit && bunx tsc -p tsconfig.test.json",

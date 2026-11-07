@@ -11,6 +11,29 @@ export const APP_VERSION = '0.1.0';
 /** Fellow's API endpoint (reverse-engineered from mobile app) */
 export const FELLOW_API_BASE = 'https://l8qtmnc692.execute-api.us-west-2.amazonaws.com/v1';
 
+/**
+ * Interface the HTTP entry binds to. Loopback only, and deliberately not configurable: these tools
+ * drive the brewer with the user's Fellow session, so the server must never listen on a LAN.
+ */
+export const MCP_HTTP_HOST = '127.0.0.1';
+
+/** Default port for the HTTP entry when AIDEN_AI_MCP_PORT is unset. */
+export const DEFAULT_MCP_HTTP_PORT = 47_831;
+
+/** Largest JSON-RPC request body the HTTP entry will read. Real requests are a few KB. */
+export const MCP_HTTP_MAX_BODY_BYTES = 1024 * 1024;
+
+/** Port for the HTTP entry: AIDEN_AI_MCP_PORT if set (1-65535), else the default. */
+export function getMcpHttpPort(): number {
+  const raw = process.env.AIDEN_AI_MCP_PORT?.trim();
+  if (!raw) return DEFAULT_MCP_HTTP_PORT;
+  const port = Number(raw);
+  if (!/^\d+$/.test(raw) || port < 1 || port > 65_535) {
+    throw new Error(`AIDEN_AI_MCP_PORT must be an integer from 1 to 65535, got "${raw}"`);
+  }
+  return port;
+}
+
 /** HTTP request timeout in milliseconds */
 export const REQUEST_TIMEOUT_MS = 30_000;
 
