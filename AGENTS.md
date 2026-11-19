@@ -34,10 +34,10 @@ When the user asks to brew coffee or shows a coffee bag photo:
 - If the aiden tools are missing or fail to connect, the HTTP server is not running: ask the user to run `bun run serve` in their own terminal, then reconnect with `/mcp`. Never start it yourself; it needs the user's 1Password session
 - `aiden.listDevices` - Get connected Aidens
 - `aiden.listProfiles` - Profiles on device
-- `aiden.createProfile` / `aiden.updateProfile` - Create/modify profiles
+- `aiden.createProfile` / `aiden.updateProfile` / `aiden.deleteProfile` - Create/modify/delete profiles, named by title (device ids are reused slots; never use them)
 
 **After brewing:**
-- `storage.logBrew` - Log the brew attempt. Always pass `deviceId` and `profileId` so the full settings are archived
+- `storage.logBrew` - Log the brew attempt. Always pass `deviceId` and `profileTitle` so the full settings are archived
 - `storage.restoreProfile` - Recreate a profile the user deleted from the brewer, from brew history (by `brewId` or `query`)
 - `storage.addFeedback` - Save feedback (rating, taste notes)
 - `user.updateSettings` - Save grinder if user mentioned it
@@ -48,7 +48,7 @@ When the user asks to brew coffee or shows a coffee bag photo:
 2. Ask for grinder model, then web search grind settings
 3. Check storage for similar past brews and their feedback
 4. Create/select a profile based on research
-5. Log the brew with `storage.logBrew` (with `deviceId` + `profileId`). The user keeps only current coffees on the Aiden; when a coffee returns, try `storage.restoreProfile` before designing a new profile
+5. Log the brew with `storage.logBrew` (with `deviceId` + `profileTitle`). The user keeps only current coffees on the Aiden; when a coffee returns, try `storage.restoreProfile` before designing a new profile
 6. After user tastes it, ask for feedback and save with `storage.addFeedback`
 
 ### Coffee Science Basics

@@ -65,20 +65,20 @@ afterEach(() => {
 });
 
 describe('archiving settings on logBrew', () => {
-  test('reads full settings from the device by id and title', async () => {
+  test('reads full settings from the device by title', async () => {
     const client = await loggedInClient();
     const device = fakeDevice([DEVICE_PROFILE]);
     const settings = await withFetch(device.fetch, () =>
-      snapshotProfile(client, { deviceId: 'dev1', profileId: 'p9', title: 'Elevator - Arsosala' })
+      snapshotProfile(client, { deviceId: 'dev1', title: 'Elevator - Arsosala' })
     );
     expect(settings).toMatchObject(SETTINGS);
   });
 
-  test('a reused id holding a different coffee is not archived', async () => {
+  test('a coffee no longer on the device is not archived from whatever now holds its old slot', async () => {
     const client = await loggedInClient();
     const device = fakeDevice([DEVICE_PROFILE]);
     const settings = await withFetch(device.fetch, () =>
-      snapshotProfile(client, { deviceId: 'dev1', profileId: 'p9', title: 'Alinea - Colombia' })
+      snapshotProfile(client, { deviceId: 'dev1', title: 'Alinea - Colombia' })
     );
     expect(settings).toBeUndefined();
   });
@@ -147,7 +147,7 @@ describe('restoring from history', () => {
     const device = fakeDevice([]);
     const result = await withFetch(device.fetch, () => restoreProfile(client, { deviceId: 'dev1', query: 'Arsosala' }));
 
-    expect(result).toMatchObject({ profileId: 'p12', alreadyOnDevice: false, title: 'Elevator - Arsosala' });
+    expect(result).toMatchObject({ alreadyOnDevice: false, title: 'Elevator - Arsosala' });
     expect(result?.brew.id).toBe(entry.id);
     expect(device.posted).toEqual([{ profileType: 0, ...SETTINGS }]);
   });
@@ -158,7 +158,7 @@ describe('restoring from history', () => {
     const device = fakeDevice([DEVICE_PROFILE]);
     const result = await withFetch(device.fetch, () => restoreProfile(client, { deviceId: 'dev1', query: 'Arsosala' }));
 
-    expect(result).toMatchObject({ profileId: 'p9', alreadyOnDevice: true });
+    expect(result).toMatchObject({ alreadyOnDevice: true, title: 'Elevator - Arsosala' });
     expect(device.posted).toEqual([]);
   });
 

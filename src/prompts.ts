@@ -50,7 +50,7 @@ Follow this workflow:
 
 6. **Create the recipe** - Combine insights from web research, community recipes, past brews, and coffee science to create an optimized profile. Use aiden.createProfile to save it.
 
-7. **Log the brew** - Use storage.logBrew with the deviceId and profileId to record this attempt and archive the full profile settings. After I taste it, ask for feedback so we can learn for next time.
+7. **Log the brew** - Use storage.logBrew with the deviceId and the profile title to record this attempt and archive the full profile settings. After I taste it, ask for feedback so we can learn for next time.
 
 8. **Grind settings** - ${grinder ? `Search the web for "${grinder} grind setting for pourover" or "batch brew" to find the recommended setting for this roast level. Look for specific click counts, dial positions, or numeric settings.` : "Ask the user which grinder they use, then search the web for that grinder's recommended pourover/batch brew settings for this roast level."}
 
@@ -66,19 +66,19 @@ Follow this workflow:
     'Diagnose and fix a brew that tastes off',
     {
       issue: z.string().describe("What's wrong with the taste (sour, bitter, weak, harsh, etc.)"),
-      profileId: z.string().optional().describe('The profile ID used (optional)')
+      profileTitle: z.string().optional().describe('Title of the profile used (optional)')
     },
-    ({ issue, profileId }) => ({
+    ({ issue, profileTitle }) => ({
       messages: [
         {
           role: 'user',
           content: {
             type: 'text',
-            text: `My coffee tastes ${issue}${profileId ? ` (using profile ${profileId})` : ''}.
+            text: `My coffee tastes ${issue}${profileTitle ? ` (using profile "${profileTitle}")` : ''}.
 
 Help me fix it:
 
-1. **Get current profile** - ${profileId ? `Use aiden.listProfiles to find profile "${profileId}" and show its current settings.` : 'Ask me which profile I used, or list my profiles with aiden.listProfiles.'}
+1. **Get current profile** - ${profileTitle ? `Use aiden.listProfiles to find the profile titled "${profileTitle}" and show its current settings.` : 'Ask me which profile I used, or list my profiles with aiden.listProfiles.'}
 
 2. **Diagnose the issue**:
    - Sour/acidic → under-extracted (need higher temp, longer bloom, or finer grind)
@@ -88,7 +88,7 @@ Help me fix it:
 
 3. **Suggest specific adjustments** - Based on the diagnosis, recommend exact parameter changes (e.g., "increase bloom temp from 94°C to 96°C").
 
-4. **Offer to update** - Ask if I want you to update the profile with these changes using aiden.updateProfile.`
+4. **Offer to update** - Ask if I want you to update the profile with these changes using aiden.updateProfile, naming it by title.`
           }
         }
       ]

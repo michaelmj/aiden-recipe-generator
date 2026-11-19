@@ -11,10 +11,13 @@ as validation.
 - Ratios, bloom temperatures, bloom durations, and device IDs reuse the canonical Fellow schemas.
 - Each brew entry may archive the profile's full writable settings (`profile.settings`), validated
   with the same `AidenCreateProfileSchema` a profile write uses. `storage.logBrew` reads them from
-  the device when given `deviceId` + `profileId`, and only when the device profile's title matches,
-  because Fellow reuses profile ids after a delete. Profiles the device reported anomalies for are
-  not archived. `storage.restoreProfile` writes archived settings back, reusing a Custom profile
-  with the same title instead of duplicating it. Entries logged before archiving cannot be restored.
+  the device when given `deviceId`, finding the profile by its title. Profiles are named by title
+  everywhere, never by device id: Fellow ids are slots reused after a delete. New entries do not
+  record the id; older entries that did keep it on disk as a legacy field that tools neither show
+  nor look up by. Profiles the device reported anomalies for are not archived, and two Custom
+  profiles sharing a title are refused as ambiguous. `storage.restoreProfile` writes archived
+  settings back, reusing a Custom profile with the same title instead of duplicating it. Entries
+  logged before archiving cannot be restored.
   Elevation is limited to -500 through 9,000 metres.
 - Every in-process read-modify-write operation is serialized by file, preventing concurrent updates
   from overwriting one another.

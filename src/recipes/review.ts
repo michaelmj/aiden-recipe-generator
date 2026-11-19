@@ -67,7 +67,8 @@ export const ApplyRecipeProposalResultSchema = z.strictObject({
   ok: z.literal(true),
   proposalId: RecipeProposalSchema.shape.proposalId,
   deviceId: ResourceIdSchema,
-  id: z.string().optional()
+  /** The created profile, named by title: Fellow's ids are reused slots. */
+  title: z.string()
 });
 
 function canonicalize(value: unknown): unknown {
@@ -215,7 +216,7 @@ export async function applyReviewedRecipeProposal(args: {
   proposal: RecipeProposalInput | RecipeProposal;
   approvalId: string;
   nowMs?: number;
-}): Promise<{ ok: true; proposalId: string; deviceId: string; id?: string }> {
+}): Promise<z.infer<typeof ApplyRecipeProposalResultSchema>> {
   const deviceId = ResourceIdSchema.parse(args.deviceId);
   const proposal = RecipeProposalSchema.parse(args.proposal);
   const nowMs = args.nowMs ?? Date.now();
@@ -226,8 +227,8 @@ export async function applyReviewedRecipeProposal(args: {
     proposalHash: recipeProposalHash(proposal),
     nowMs
   });
-  const result = await args.fellow.createProfile({ deviceId, profile: proposal.profile });
-  return { ok: true, proposalId: proposal.proposalId, deviceId, id: result?.id as string | undefined };
+  await args.fellow.createProfile({ deviceId, profile: proposal.profile });
+  return { ok: true, proposalId: proposal.proposalId, deviceId, title: proposal.profile.title };
 }
 
 /** Cancel a review token. Cancellation only changes local state and never contacts Fellow. */

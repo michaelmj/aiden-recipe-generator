@@ -335,10 +335,10 @@ Run `bun test` and `bun run typecheck` to confirm a clean checkout before report
 | `auth.logout` | Clear the stored Fellow session |
 | `aiden.listDevices` | List connected Aiden brewers |
 | `aiden.getDevice` | Get details for one device |
-| `aiden.listProfiles` | List brew profiles on a device |
-| `aiden.createProfile` | Create a new brew profile |
-| `aiden.updateProfile` | Update an existing Custom profile |
-| `aiden.deleteProfile` | Delete an existing Custom profile |
+| `aiden.listProfiles` | List brew profiles on a device; other tools name a profile by its title |
+| `aiden.createProfile` | Create a new brew profile (refused if a Custom profile already has the title) |
+| `aiden.updateProfile` | Update the Custom profile with a given title |
+| `aiden.deleteProfile` | Delete the Custom profile with a given title |
 | `recipe.validateProposal` | Validate local proposal JSON and compute its content hash |
 | `recipe.previewProposal` | Preview exact device and profile changes before a write |
 | `recipe.applyProposal` | Apply one reviewed, hash-bound proposal |
@@ -346,7 +346,7 @@ Run `bun test` and `bun run typecheck` to confirm a clean checkout before report
 | `sheet.search` | Search recipes by origin/roast/processing (bundled dataset, plus the opt-in sheet) |
 | `sheet.list` | List every known recipe from both sources |
 | `sheet.sync` | Refresh the cached community sheet — a no-op unless an operator opted in |
-| `storage.logBrew` | Log a brew attempt; with `deviceId` + `profileId` it archives the full profile settings |
+| `storage.logBrew` | Log a brew attempt; with `deviceId` + `profileTitle` it archives the full profile settings |
 | `storage.restoreProfile` | Recreate a deleted profile on the brewer from archived brew history |
 | `storage.addFeedback` | Add taste feedback to a logged brew (rating, notes) |
 | `storage.getHistory` | Get recent brew history with feedback |

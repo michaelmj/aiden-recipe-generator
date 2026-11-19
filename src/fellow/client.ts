@@ -731,46 +731,77 @@ export class FellowClient {
   }
 
   /**
-   * Get a specific profile by ID.
-   * Note: Fellow API doesn't support fetching single profile, so we fetch all and filter.
+   * The profile with this exact title, preferring the Custom folder. Fellow profile ids are slot
+   * indexes that are reused once a profile is deleted (p9 was one coffee, then another), so a
+   * title is the only stable way to name a profile (aiden-recipe-generator-46y.1). Undefined when
+   * nothing has the title; an error when two Custom profiles share it, since either could be meant.
    */
-  async getProfile(args: { deviceId: string; profileId: string }): Promise<Profile> {
-    const profile = (await this.listProfiles(args)).find((p) => p.id === args.profileId);
-    if (!profile)
-      throw new Error(`No profile "${args.profileId}" on this device. List the profiles to see what is there.`);
-    return profile;
+  async findProfileByTitle(args: { deviceId: string; title: string }): Promise<Profile | undefined> {
+    return pickByTitle(await this.listProfiles(args), args.title);
   }
 
-  /** Create a new profile on the device */
+  /** Create a new profile on the device. A Custom profile with the same title must not exist. */
   async createProfile(args: { deviceId: string; profile: AidenCreateProfileInput }) {
+    const profiles = await this.listProfiles(args);
+    if (customWithTitle(profiles, args.profile.title).length > 0)
+      throw new Error(
+        `A Custom profile titled "${args.profile.title}" is already on this device. Profiles are named by ` +
+          'title, so update that one or choose another title.'
+      );
     return this.requestOptionalJson<Record<string, unknown>>('POST', `/devices/${seg(args.deviceId)}/profiles`, {
       body: args.profile
     });
   }
 
-  /** Update an existing Custom profile (cannot modify Fellow/Drops profiles) */
-  async updateProfile(args: { deviceId: string; profileId: string; patch: AidenUpdateProfileInput }) {
-    const profile = await this.getProfile(args);
-    if (profile.folder !== 'Custom')
-      throw new Error(
-        `Only Custom profiles can be edited, and "${args.profileId}" is a ${profile.folder} profile. ` +
-          'Create a Custom copy and change that instead.'
-      );
+  /** Update the Custom profile with this title (cannot modify Fellow/Drops profiles). */
+  async updateProfile(args: { deviceId: string; title: string; patch: AidenUpdateProfileInput }) {
+    const profiles = await this.listProfiles(args);
+    const profile = requireCustom(profiles, args.title, 'edited');
+    const renamed = args.patch.title;
+    if (renamed !== undefined && renamed !== args.title && customWithTitle(profiles, renamed).length > 0)
+      throw new Error(`A Custom profile titled "${renamed}" is already on this device; choose another title.`);
     return this.requestOptionalJson<Record<string, unknown>>(
       'PATCH',
-      `/devices/${seg(args.deviceId)}/profiles/${seg(args.profileId)}`,
-      {
-        body: args.patch
-      }
+      `/devices/${seg(args.deviceId)}/profiles/${seg(profile.id)}`,
+      { body: args.patch }
     );
   }
 
-  /** Delete a Custom profile (cannot delete Fellow/Drops profiles) */
-  async deleteProfile(args: { deviceId: string; profileId: string }) {
-    const profile = await this.getProfile(args);
-    if (profile.folder !== 'Custom')
-      throw new Error(`Only Custom profiles can be deleted, and "${args.profileId}" is a ${profile.folder} profile.`);
-    await this.requestVoid('DELETE', `/devices/${seg(args.deviceId)}/profiles/${seg(args.profileId)}`);
+  /** Delete the Custom profile with this title (cannot delete Fellow/Drops profiles). */
+  async deleteProfile(args: { deviceId: string; title: string }) {
+    const profile = requireCustom(await this.listProfiles(args), args.title, 'deleted');
+    await this.requestVoid('DELETE', `/devices/${seg(args.deviceId)}/profiles/${seg(profile.id)}`);
     return { ok: true };
   }
+}
+
+function customWithTitle(profiles: Profile[], title: string): Profile[] {
+  return profiles.filter((profile) => profile.folder === 'Custom' && profile.title === title);
+}
+
+function pickByTitle(profiles: Profile[], title: string): Profile | undefined {
+  const custom = customWithTitle(profiles, title);
+  if (custom.length > 1)
+    throw new Error(
+      `${custom.length} Custom profiles are titled "${title}", so which one is meant is ambiguous. ` +
+        'Rename or delete the extra copies in the Fellow app first.'
+    );
+  return custom[0] ?? profiles.find((profile) => profile.title === title);
+}
+
+/** The single Custom profile with this title, or an error naming why it cannot be written. */
+function requireCustom(profiles: Profile[], title: string, verb: 'edited' | 'deleted'): Profile {
+  const profile = pickByTitle(profiles, title);
+  if (!profile) {
+    const titles = profiles.filter((candidate) => candidate.folder === 'Custom').map((candidate) => candidate.title);
+    throw new Error(
+      `No profile titled "${title}" on this device. Custom profiles: ${titles.length ? titles.map((t) => `"${t}"`).join(', ') : 'none'}.`
+    );
+  }
+  if (profile.folder !== 'Custom')
+    throw new Error(
+      `Only Custom profiles can be ${verb}, and "${title}" is a ${profile.folder} profile.` +
+        (verb === 'edited' ? ' Create a Custom copy and change that instead.' : '')
+    );
+  return profile;
 }

@@ -175,10 +175,10 @@ describe('folder labels from the device', () => {
 
     await withFetch(stub, async () => {
       const client = new FellowClient();
-      await expect(client.updateProfile({ deviceId: 'dev1', profileId: 'p1', patch: { ratio: 16 } })).rejects.toThrow(
-        /Only Custom profiles can be edited/
-      );
-      await expect(client.deleteProfile({ deviceId: 'dev1', profileId: 'p1' })).rejects.toThrow(
+      await expect(
+        client.updateProfile({ deviceId: 'dev1', title: 'Morning Filter', patch: { ratio: 16 } })
+      ).rejects.toThrow(/Only Custom profiles can be edited/);
+      await expect(client.deleteProfile({ deviceId: 'dev1', title: 'Morning Filter' })).rejects.toThrow(
         /Only Custom profiles can be deleted/
       );
     });
@@ -232,7 +232,7 @@ describe('responses that are not the JSON we asked for (aiden-recipe-generator-j
     const client = await loggedInClient();
 
     await withFetch(
-      respondWith(() => new Response(null, { status: 204 })),
+      respondWith((_url, init) => (init?.method === 'POST' ? new Response(null, { status: 204 }) : jsonResponse([]))),
       async () => {
         expect(await client.createProfile({ deviceId: 'dev1', profile: CREATABLE_PROFILE })).toBeUndefined();
       }

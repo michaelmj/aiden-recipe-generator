@@ -49,8 +49,10 @@ export const BrewEntrySchema = z.strictObject({
   }),
   profile: z.strictObject({
     /**
-     * The device's id for the profile at the time of the brew. Fellow reuses ids once a profile is
-     * deleted (p9 was one coffee, then another), so this is a hint, never a lookup key.
+     * Legacy: the device's slot id for the profile at the time of the brew, recorded only by
+     * entries logged before aiden-recipe-generator-46y.1. Fellow reuses ids once a profile is
+     * deleted (p9 was one coffee, then another), so it is never written, shown, or looked up by;
+     * the title identifies the profile.
      */
     id: ResourceIdSchema.optional(),
     title: safeText(120),

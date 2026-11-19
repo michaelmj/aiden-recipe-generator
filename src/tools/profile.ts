@@ -4,7 +4,11 @@ import type { FellowClient } from '@/fellow/client';
 import { AidenCreateProfileSchema, AidenUpdateProfileSchema, ResourceIdSchema } from '@/schemas';
 import { toolResponse } from '@/tools/response';
 
+/** Exact title of a profile on the device, as aiden.listProfiles shows it. */
+const ProfileTitleSchema = z.string().min(1).max(120).describe('Exact profile title, as aiden.listProfiles shows it');
+
 const ProfileOutputSchema = z.object({
+  /** Fellow's slot index for the profile; reused after a delete, so never a way to name one. */
   id: z.string(),
   title: z.string(),
   folder: z.enum(['Custom', 'Fellow', 'Drops', 'Unknown']),
@@ -31,7 +35,8 @@ export function registerProfileTools(server: McpServer, fellow: FellowClient) {
     {
       title: 'List Brew Profiles',
       description:
-        'List brew profiles for a device. A profile carrying an `anomalies` list reported values ' +
+        'List brew profiles for a device. Name a profile by its title in every other tool: ids are ' +
+        'slots the device reuses after a delete. A profile carrying an `anomalies` list reported values ' +
         'outside what the brewer can do, or a title that had to be trimmed — check those fields ' +
         'before brewing from them rather than passing them on as advice.',
       inputSchema: { deviceId: ResourceIdSchema },
@@ -44,13 +49,15 @@ export function registerProfileTools(server: McpServer, fellow: FellowClient) {
     'aiden.createProfile',
     {
       title: 'Create Brew Profile',
-      description: 'Create a new profile on the device.',
+      description:
+        'Create a new Custom profile on the device. Profiles are named by title, so a title already ' +
+        'used by a Custom profile on the device is refused; update that profile instead.',
       inputSchema: { deviceId: ResourceIdSchema, profile: AidenCreateProfileSchema },
-      outputSchema: { ok: z.boolean(), id: z.string().optional() }
+      outputSchema: { ok: z.boolean(), title: z.string() }
     },
     async ({ deviceId, profile }) => {
-      const result = await fellow.createProfile({ deviceId, profile });
-      return toolResponse({ ok: true, id: result?.id as string | undefined });
+      await fellow.createProfile({ deviceId, profile });
+      return toolResponse({ ok: true, title: profile.title });
     }
   );
 
@@ -59,17 +66,18 @@ export function registerProfileTools(server: McpServer, fellow: FellowClient) {
     {
       title: 'Update Brew Profile',
       description:
-        'Patch an existing Custom profile with at least one changed field. This should not be used for Drops/Fellow defaults.',
+        'Patch the Custom profile with this exact title, changing at least one field. Refused when no ' +
+        'Custom profile or more than one has the title, and for Drops/Fellow defaults.',
       inputSchema: {
         deviceId: ResourceIdSchema,
-        profileId: ResourceIdSchema,
+        title: ProfileTitleSchema,
         patch: AidenUpdateProfileSchema
       },
-      outputSchema: { ok: z.boolean() }
+      outputSchema: { ok: z.boolean(), title: z.string() }
     },
-    async ({ deviceId, profileId, patch }) => {
-      await fellow.updateProfile({ deviceId, profileId, patch });
-      return toolResponse({ ok: true });
+    async ({ deviceId, title, patch }) => {
+      await fellow.updateProfile({ deviceId, title, patch });
+      return toolResponse({ ok: true, title: patch.title ?? title });
     }
   );
 
@@ -77,12 +85,13 @@ export function registerProfileTools(server: McpServer, fellow: FellowClient) {
     'aiden.deleteProfile',
     {
       title: 'Delete Brew Profile',
-      description: 'Delete an existing Custom profile.',
-      inputSchema: { deviceId: ResourceIdSchema, profileId: ResourceIdSchema },
+      description:
+        'Delete the Custom profile with this exact title. Refused when no Custom profile or more than one has the title.',
+      inputSchema: { deviceId: ResourceIdSchema, title: ProfileTitleSchema },
       outputSchema: { ok: z.boolean() }
     },
-    async ({ deviceId, profileId }) => {
-      await fellow.deleteProfile({ deviceId, profileId });
+    async ({ deviceId, title }) => {
+      await fellow.deleteProfile({ deviceId, title });
       return toolResponse({ ok: true });
     }
   );

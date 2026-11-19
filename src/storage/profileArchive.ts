@@ -38,29 +38,26 @@ export function settingsFromDeviceProfile(profile: Profile): AidenCreateProfileI
 }
 
 /**
- * Read a profile's full settings from the device. Matching is by id and then confirmed by title,
- * because a reused id can point at a different coffee than the one being logged.
+ * Read a profile's full settings from the device by its title. Ids are not consulted: Fellow
+ * reuses them, so an id can point at a different coffee than the one being logged.
  */
 export async function snapshotProfile(
   fellow: FellowClient,
-  args: { deviceId: string; profileId: string; title: string }
+  args: { deviceId: string; title: string }
 ): Promise<AidenCreateProfileInput | undefined> {
-  const profiles = await fellow.listProfiles({ deviceId: args.deviceId });
-  const profile = profiles.find((candidate) => candidate.id === args.profileId);
-  if (!profile || profile.title !== args.title) return undefined;
-  return settingsFromDeviceProfile(profile);
+  const profile = await fellow.findProfileByTitle(args);
+  return profile ? settingsFromDeviceProfile(profile) : undefined;
 }
 
 export type RestoreResult = {
   brew: BrewEntry;
   title: string;
-  profileId: string | undefined;
   alreadyOnDevice: boolean;
 };
 
 /**
  * Write a logged brew's settings back to the device. A Custom profile already on the device with
- * the same title is reused instead of duplicated.
+ * the same title is reused instead of duplicated; two of them is an error, as either could be meant.
  */
 export async function restoreProfile(
   fellow: FellowClient,
@@ -74,12 +71,9 @@ export async function restoreProfile(
     ...(args.title ? { title: args.title } : {})
   });
 
-  const existing = (await fellow.listProfiles({ deviceId: args.deviceId })).find(
-    (profile) => profile.folder === 'Custom' && profile.title === settings.title
-  );
-  if (existing) return { brew, title: settings.title, profileId: existing.id, alreadyOnDevice: true };
+  const existing = await fellow.findProfileByTitle({ deviceId: args.deviceId, title: settings.title });
+  if (existing?.folder === 'Custom') return { brew, title: settings.title, alreadyOnDevice: true };
 
-  const created = await fellow.createProfile({ deviceId: args.deviceId, profile: settings });
-  const id = typeof created?.id === 'string' ? created.id : undefined;
-  return { brew, title: settings.title, profileId: id, alreadyOnDevice: false };
+  await fellow.createProfile({ deviceId: args.deviceId, profile: settings });
+  return { brew, title: settings.title, alreadyOnDevice: false };
 }

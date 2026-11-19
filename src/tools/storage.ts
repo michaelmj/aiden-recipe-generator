@@ -11,7 +11,19 @@ import { restoreProfile, snapshotProfile } from '@/storage/profileArchive';
 import { getSettings, type UserSettings, updateSettings } from '@/storage/userSettings';
 import { toolResponse } from '@/tools/response';
 
-const BrewEntrySchema: z.ZodType<BrewEntry> = z.object({
+type PublicBrewEntry = Omit<BrewEntry, 'profile'> & { profile: Omit<BrewEntry['profile'], 'id'> };
+
+/**
+ * A brew entry as tools show it. Entries logged before aiden-recipe-generator-46y.1 carry the
+ * device's profile id, a slot Fellow has likely reused since, so it is left out rather than
+ * offered as something to look a profile up by.
+ */
+function publicEntry(entry: BrewEntry): PublicBrewEntry {
+  const { id: _slot, ...profile } = entry.profile;
+  return { ...entry, profile };
+}
+
+const BrewEntrySchema: z.ZodType<PublicBrewEntry> = z.object({
   id: z.string(),
   timestamp: z.number(),
   coffee: z.object({
@@ -22,7 +34,6 @@ const BrewEntrySchema: z.ZodType<BrewEntry> = z.object({
     processing: z.string().optional()
   }),
   profile: z.object({
-    id: z.string().optional(),
     title: z.string(),
     ratio: z.number(),
     bloomTemp: z.number(),
@@ -52,10 +63,11 @@ export function registerStorageTools(server: McpServer, fellow: FellowClient) {
     {
       title: 'Log Brew Attempt',
       description:
-        'Log a brew attempt for future reference. Pass deviceId and profileId and the full profile ' +
-        'settings are read from the brewer and archived with the entry, so the profile can be ' +
-        'restored with storage.restoreProfile after it is deleted from the device. Or pass the ' +
-        'settings directly. ratio, bloomTemp and bloomDuration are only needed when neither is given.',
+        'Log a brew attempt for future reference. Pass deviceId and the profile title, and the full ' +
+        'settings of the profile with that title are read from the brewer and archived with the ' +
+        'entry, so it can be restored with storage.restoreProfile after it is deleted from the ' +
+        'device. Or pass the settings directly. ratio, bloomTemp and bloomDuration are only needed ' +
+        'when neither is given.',
       inputSchema: {
         coffeeName: z.string().describe('Name of the coffee'),
         roaster: z.string().optional().describe('Roaster name'),
@@ -63,8 +75,7 @@ export function registerStorageTools(server: McpServer, fellow: FellowClient) {
         roast: z.string().optional().describe('Roast level (light, medium, dark)'),
         processing: z.string().optional().describe('Processing method (washed, natural, honey)'),
         deviceId: ResourceIdSchema.optional().describe('Device the profile is on, to archive its full settings'),
-        profileId: z.string().optional().describe('Profile ID used'),
-        profileTitle: z.string().describe('Profile title'),
+        profileTitle: z.string().describe('Exact title of the profile brewed, as aiden.listProfiles shows it'),
         settings: AidenCreateProfileSchema.optional().describe(
           'Full profile settings as brewed, when not reading them from the device'
         ),
@@ -77,17 +88,13 @@ export function registerStorageTools(server: McpServer, fellow: FellowClient) {
     async (args) => {
       let settings: AidenCreateProfileInput | undefined = args.settings;
       let warning = '';
-      if (!settings && args.deviceId && args.profileId) {
+      if (!settings && args.deviceId) {
         try {
-          settings = await snapshotProfile(fellow, {
-            deviceId: args.deviceId,
-            profileId: args.profileId,
-            title: args.profileTitle
-          });
+          settings = await snapshotProfile(fellow, { deviceId: args.deviceId, title: args.profileTitle });
           if (!settings)
-            warning = ` Profile "${args.profileId}" titled "${args.profileTitle}" was not found on the device in a restorable shape, so full settings were not archived.`;
-        } catch {
-          warning = ' The device could not be read, so full settings were not archived.';
+            warning = ` No profile titled "${args.profileTitle}" was found on the device in a restorable shape, so full settings were not archived.`;
+        } catch (error) {
+          warning = ` Full settings were not archived: ${error instanceof Error ? error.message : 'the device could not be read.'}`;
         }
       }
       const ratio = args.ratio ?? settings?.ratio;
@@ -95,7 +102,7 @@ export function registerStorageTools(server: McpServer, fellow: FellowClient) {
       const bloomDuration = args.bloomDuration ?? settings?.bloomDuration;
       if (ratio === undefined || bloomTemp === undefined || bloomDuration === undefined)
         throw new Error(
-          'Give ratio, bloomTemp and bloomDuration, or the full settings, or a deviceId and profileId to read them from.'
+          'Give ratio, bloomTemp and bloomDuration, or the full settings, or a deviceId to read them from by profile title.'
         );
       const entry = await logBrew({
         coffee: {
@@ -105,7 +112,7 @@ export function registerStorageTools(server: McpServer, fellow: FellowClient) {
           roast: args.roast,
           processing: args.processing
         },
-        profile: { id: args.profileId, title: args.profileTitle, ratio, bloomTemp, bloomDuration, settings }
+        profile: { title: args.profileTitle, ratio, bloomTemp, bloomDuration, settings }
       });
       return toolResponse({
         ok: true,
@@ -123,8 +130,8 @@ export function registerStorageTools(server: McpServer, fellow: FellowClient) {
       description:
         'Recreate a deleted profile on the brewer from its archived settings in brew history. ' +
         'Name a brewId, or a query (coffee name, roaster, origin or profile title) to use the ' +
-        'best-rated matching brew. A Custom profile with the same title already on the device is ' +
-        'returned instead of duplicated. Optionally override the title.',
+        'best-rated matching brew. Profiles are named by title: a Custom profile with the same title ' +
+        'already on the device is reported instead of duplicated. Optionally override the title.',
       inputSchema: {
         deviceId: ResourceIdSchema,
         brewId: z.string().optional().describe('Brew to restore from'),
@@ -134,7 +141,6 @@ export function registerStorageTools(server: McpServer, fellow: FellowClient) {
       outputSchema: {
         ok: z.boolean(),
         error: z.string().optional(),
-        profileId: z.string().optional(),
         title: z.string().optional(),
         brewId: z.string().optional(),
         alreadyOnDevice: z.boolean().optional()
@@ -150,7 +156,6 @@ export function registerStorageTools(server: McpServer, fellow: FellowClient) {
         });
       return toolResponse({
         ok: true,
-        profileId: result.profileId,
         title: result.title,
         brewId: result.brew.id,
         alreadyOnDevice: result.alreadyOnDevice
@@ -175,7 +180,7 @@ export function registerStorageTools(server: McpServer, fellow: FellowClient) {
       // Zod validates rating is 1-5, cast is safe
       const entry = await addFeedback(brewId, { rating: rating as 1 | 2 | 3 | 4 | 5, taste, notes });
       if (!entry) return toolResponse({ ok: false, error: 'Brew not found' });
-      return toolResponse({ ok: true, entry });
+      return toolResponse({ ok: true, entry: publicEntry(entry) });
     }
   );
 
@@ -189,7 +194,7 @@ export function registerStorageTools(server: McpServer, fellow: FellowClient) {
     },
     async ({ limit }) => {
       const entries = await getRecentBrews(limit);
-      return toolResponse({ ok: true, count: entries.length, entries });
+      return toolResponse({ ok: true, count: entries.length, entries: entries.map(publicEntry) });
     }
   );
 
@@ -203,7 +208,7 @@ export function registerStorageTools(server: McpServer, fellow: FellowClient) {
     },
     async ({ query }) => {
       const entries = await searchBrews(query);
-      return toolResponse({ ok: true, count: entries.length, entries });
+      return toolResponse({ ok: true, count: entries.length, entries: entries.map(publicEntry) });
     }
   );
 
@@ -221,7 +226,7 @@ export function registerStorageTools(server: McpServer, fellow: FellowClient) {
     },
     async (args) => {
       const entries = await getSimilarBrews(args);
-      return toolResponse({ ok: true, count: entries.length, entries });
+      return toolResponse({ ok: true, count: entries.length, entries: entries.map(publicEntry) });
     }
   );
 

@@ -72,5 +72,7 @@ After the operator reviews that preview, call `recipe.applyProposal` with the sa
 `deviceId`, and returned `approvalId`. The local approval stores the proposal hash and device id;
 changed parameters, a different device, expired approvals, cancelled approvals, and replayed
 approvals are rejected. The approval is reserved before the single bounded `createProfile` call,
-so one approval cannot cause duplicate writes. Call `recipe.cancelProposalReview` to cancel without
+so one approval cannot cause duplicate writes. Profiles are named by title: the write is refused
+when a Custom profile on the device already has the proposal's title, and the result reports the
+created profile by that title rather than by Fellow's reusable slot id. Call `recipe.cancelProposalReview` to cancel without
 contacting Fellow.

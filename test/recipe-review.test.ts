@@ -157,7 +157,7 @@ describe('recipe review and apply workflow', () => {
         proposal,
         nowMs: 2_000
       })
-    ).resolves.toEqual({ ok: true, proposalId: proposal.proposalId, deviceId: 'device-1', id: 'remote-profile-1' });
+    ).resolves.toEqual({ ok: true, proposalId: proposal.proposalId, deviceId: 'device-1', title: PROFILE.title });
     expect(calls).toEqual([{ deviceId: 'device-1', profile: PROFILE }]);
     await expect(
       applyReviewedRecipeProposal({
