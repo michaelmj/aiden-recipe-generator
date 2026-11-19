@@ -17,6 +17,8 @@ as validation.
   it refuses to log without one. Profiles are named by title everywhere, never by device id:
   Fellow ids are slots reused after a delete. Two Custom profiles sharing a title are refused as
   ambiguous, and profiles the device reported anomalies for are not read.
+- See [PROFILES-AND-RECIPES.md](PROFILES-AND-RECIPES.md) for why profiles are named by title and
+  how restoring works.
 - Entries logged before full recipes (aiden-recipe-generator-46y.2) still load: one that archived
   `settings` becomes a full entry; one that kept only ratio and bloom is shown as
   `{ title, partial: true, recipe: { ratio, bloomTemperature, bloomDuration } }`. Their legacy

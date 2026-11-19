@@ -9,7 +9,9 @@ local ids after JSON round-trip. Apply code must resolve those ids against curre
 Version 1 contains:
 
 - normalized coffee identity and target brew mode/volume
-- a complete `AidenCreateProfileSchema` payload
+- a complete `AidenCreateProfileSchema` payload: a title plus the canonical `RecipeSchema` recipe
+  (bloom and single-serve/batch pulse steps), the same shape the brew log and recipe search use
+  (see [PROFILES-AND-RECIPES.md](PROFILES-AND-RECIPES.md))
 - ranked evidence with stable provenance, trust tier, observations, warnings, and optional outcomes
 - canonically validated partial source parameters when evidence does not contain a complete profile
 - explicit model assumptions, missing evidence, source conflicts, confidence, and conflict resolution

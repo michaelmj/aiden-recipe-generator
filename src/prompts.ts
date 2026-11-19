@@ -48,9 +48,9 @@ Follow this workflow:
    - Natural process: fruitier, often benefits from slightly lower temps
    - High altitude origins: denser beans, can handle more extraction
 
-6. **Create the recipe** - Combine insights from web research, community recipes, past brews, and coffee science to create an optimized profile. Use aiden.createProfile to save it.
+6. **Create the recipe** - If storage.search finds this coffee logged before, recreate its profile with storage.restoreProfile instead of starting over. Otherwise combine insights from web research, community recipes, past brews, and coffee science into a whole recipe (bloom plus single-serve and batch pulse steps with temperatures). Use aiden.createProfile to save it under a title not already used by a Custom profile; profiles are named by title, never by device id.
 
-7. **Log the brew** - Use storage.logBrew with the deviceId and the profile title to record this attempt and archive the full profile settings. After I taste it, ask for feedback so we can learn for next time.
+7. **Log the brew** - Use storage.logBrew with the deviceId and the profile title to record this attempt with its whole recipe, so the profile can be restored after it leaves the brewer. After I taste it, ask for feedback so we can learn for next time.
 
 8. **Grind settings** - ${grinder ? `Search the web for "${grinder} grind setting for pourover" or "batch brew" to find the recommended setting for this roast level. Look for specific click counts, dial positions, or numeric settings.` : "Ask the user which grinder they use, then search the web for that grinder's recommended pourover/batch brew settings for this roast level."}
 

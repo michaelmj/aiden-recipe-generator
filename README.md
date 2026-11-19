@@ -282,6 +282,8 @@ After tasting, tell it what you thought — feedback is logged and used to rank 
 Everything local lives in `~/.aiden-ai-profile-generator`: the encrypted session
 (`session.enc.json`), the HTTP bearer token (`http-token`), brew log, user settings, cached sheet
 profiles, and pending proposal approvals. Details in [docs/LOCAL-STORAGE.md](docs/LOCAL-STORAGE.md).
+Profiles are named by title (device ids are reused slots), and every stored recipe includes bloom
+and pulse steps; see [docs/PROFILES-AND-RECIPES.md](docs/PROFILES-AND-RECIPES.md).
 
 | Variable | Effect |
 |---|---|

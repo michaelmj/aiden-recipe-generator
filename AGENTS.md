@@ -49,7 +49,7 @@ When the user asks to brew coffee or shows a coffee bag photo:
 2. Ask for grinder model, then web search grind settings
 3. Check storage for similar past brews and their feedback
 4. Create/select a profile based on research
-5. Log the brew with `storage.logBrew` (with `deviceId` + `profileTitle`). The user keeps only current coffees on the Aiden; when a coffee returns, try `storage.restoreProfile` before designing a new profile
+5. Log the brew with `storage.logBrew` (with `deviceId` + `profileTitle`; see `docs/PROFILES-AND-RECIPES.md`). The user keeps only current coffees on the Aiden; when a coffee returns, try `storage.restoreProfile` before designing a new profile
 6. After user tastes it, ask for feedback and save with `storage.addFeedback`
 
 ### Coffee Science Basics
