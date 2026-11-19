@@ -258,6 +258,12 @@ function roastLevel(value: string | undefined): CoffeeIdentity['roastLevel'] {
   return 'unknown';
 }
 
+/** Archived brew settings as evidence parameters: everything writable except identity fields. */
+function historySettingsParameters(settings: NonNullable<BrewEntry['profile']['settings']>) {
+  const { title: _title, profileType: _profileType, ...parameters } = settings;
+  return parameters;
+}
+
 /** Construct highest-trust evidence only from values in a tasted local brew-log entry. */
 export function evidenceFromBrewHistory(entry: BrewEntry): VerifiedEvidenceCandidate {
   if (!entry.feedback) throw new Error('First-party history needs saved tasting feedback.');
@@ -279,11 +285,13 @@ export function evidenceFromBrewHistory(entry: BrewEntry): VerifiedEvidenceCandi
       roastLevel: roastLevel(entry.coffee.roast),
       ...(entry.coffee.processing ? { processing: entry.coffee.processing } : {})
     },
-    sourceParameters: {
-      ratio: entry.profile.ratio,
-      bloomDuration: entry.profile.bloomDuration,
-      bloomTemperature: entry.profile.bloomTemp
-    },
+    sourceParameters: entry.profile.settings
+      ? historySettingsParameters(entry.profile.settings)
+      : {
+          ratio: entry.profile.ratio,
+          bloomDuration: entry.profile.bloomDuration,
+          bloomTemperature: entry.profile.bloomTemp
+        },
     observations,
     outcome: { rating: entry.feedback.rating, ...(entry.feedback.notes ? { notes: entry.feedback.notes } : {}) }
   });

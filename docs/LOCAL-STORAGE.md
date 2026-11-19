@@ -9,6 +9,12 @@ as validation.
   bidi/invisible characters, and collapsed before storage/output. Ordinary fields are capped at 200
   characters; titles at 120; notes at 1,000.
 - Ratios, bloom temperatures, bloom durations, and device IDs reuse the canonical Fellow schemas.
+- Each brew entry may archive the profile's full writable settings (`profile.settings`), validated
+  with the same `AidenCreateProfileSchema` a profile write uses. `storage.logBrew` reads them from
+  the device when given `deviceId` + `profileId`, and only when the device profile's title matches,
+  because Fellow reuses profile ids after a delete. Profiles the device reported anomalies for are
+  not archived. `storage.restoreProfile` writes archived settings back, reusing a Custom profile
+  with the same title instead of duplicating it. Entries logged before archiving cannot be restored.
   Elevation is limited to -500 through 9,000 metres.
 - Every in-process read-modify-write operation is serialized by file, preventing concurrent updates
   from overwriting one another.

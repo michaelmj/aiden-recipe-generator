@@ -27,6 +27,7 @@ Do not just suggest existing profiles without first:
 
 ## After Brewing
 
-- Log the brew with `storage.logBrew`
+- Log the brew with `storage.logBrew`, passing `deviceId` and `profileId` so full settings are archived
+- When a past coffee returns, recreate its profile with `storage.restoreProfile`
 - Ask for feedback after tasting
 - Save feedback with `storage.addFeedback`

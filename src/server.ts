@@ -45,7 +45,7 @@ export function createMcpServer(services: Services): McpServer {
   registerProfileTools(server, services.fellow);
   registerRecipeTools(server, services.fellow);
   registerSheetTools(server, services.dataset, services.sheetStore);
-  registerStorageTools(server);
+  registerStorageTools(server, services.fellow);
   registerPrompts(server);
   return server;
 }

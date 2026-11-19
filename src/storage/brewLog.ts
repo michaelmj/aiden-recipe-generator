@@ -4,7 +4,13 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import * as z from 'zod/v4';
 import { getAppDataDir } from '@/config';
-import { AidenBloomDurationSchema, AidenRatioSchema, AidenTemperatureSchema, ResourceIdSchema } from '@/schemas';
+import {
+  AidenBloomDurationSchema,
+  AidenCreateProfileSchema,
+  AidenRatioSchema,
+  AidenTemperatureSchema,
+  ResourceIdSchema
+} from '@/schemas';
 import { atomicWriteStore, readStore, withStoreLock } from '@/storage/jsonStore';
 import { sanitizeText } from '@/text';
 
@@ -42,11 +48,20 @@ export const BrewEntrySchema = z.strictObject({
     processing: safeText().optional()
   }),
   profile: z.strictObject({
+    /**
+     * The device's id for the profile at the time of the brew. Fellow reuses ids once a profile is
+     * deleted (p9 was one coffee, then another), so this is a hint, never a lookup key.
+     */
     id: ResourceIdSchema.optional(),
     title: safeText(120),
     ratio: AidenRatioSchema,
     bloomTemp: AidenTemperatureSchema,
-    bloomDuration: AidenBloomDurationSchema
+    bloomDuration: AidenBloomDurationSchema,
+    /**
+     * Every writable setting of the profile as brewed, so it can be recreated after the operator
+     * clears it off the brewer. Absent on entries logged before this was recorded.
+     */
+    settings: AidenCreateProfileSchema.optional()
   }),
   feedback: FeedbackSchema.optional()
 });
@@ -143,4 +158,40 @@ export async function getSimilarBrews(input: z.input<typeof SimilarCoffeeSchema>
       return false;
     })
   );
+}
+
+const RestoreQuerySchema = z
+  .strictObject({ brewId: BrewIdSchema.optional(), query: safeText().optional() })
+  .refine((value) => value.brewId || value.query, 'Name a brewId or a search query.');
+
+/**
+ * The logged brew to rebuild a profile from: the named entry, or else the best-rated entry
+ * matching the query (rated before unrated, then newest). Only entries that recorded full
+ * settings qualify, because a profile cannot be rebuilt from ratio and bloom alone.
+ */
+export async function findRestorableBrew(input: z.input<typeof RestoreQuerySchema>): Promise<BrewEntry | null> {
+  const { brewId, query } = RestoreQuerySchema.parse(input);
+  const path = await getLogPath();
+  const entries = await withStoreLock(path, async () => (await readLog(path)).entries);
+  if (brewId) {
+    const entry = entries.find((candidate) => candidate.id === brewId);
+    if (!entry) return null;
+    if (!entry.profile.settings)
+      throw new Error(
+        `Brew ${brewId} was logged before full profile settings were recorded, so it cannot be restored.`
+      );
+    return entry;
+  }
+  const q = (query ?? '').toLowerCase();
+  const matches = entries.filter(
+    (entry) =>
+      entry.profile.settings &&
+      [entry.coffee.name, entry.coffee.roaster, entry.coffee.origin, entry.profile.title]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(q)
+  );
+  matches.sort((a, b) => (b.feedback?.rating ?? 0) - (a.feedback?.rating ?? 0) || b.timestamp - a.timestamp);
+  return matches[0] ?? null;
 }

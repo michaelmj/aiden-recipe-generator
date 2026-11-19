@@ -50,7 +50,7 @@ Follow this workflow:
 
 6. **Create the recipe** - Combine insights from web research, community recipes, past brews, and coffee science to create an optimized profile. Use aiden.createProfile to save it.
 
-7. **Log the brew** - Use storage.logBrew to record this attempt. After I taste it, ask for feedback so we can learn for next time.
+7. **Log the brew** - Use storage.logBrew with the deviceId and profileId to record this attempt and archive the full profile settings. After I taste it, ask for feedback so we can learn for next time.
 
 8. **Grind settings** - ${grinder ? `Search the web for "${grinder} grind setting for pourover" or "batch brew" to find the recommended setting for this roast level. Look for specific click counts, dial positions, or numeric settings.` : "Ask the user which grinder they use, then search the web for that grinder's recommended pourover/batch brew settings for this roast level."}
 
