@@ -9,8 +9,10 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { FellowClient } from '@/fellow/client';
 import { type Session, SessionStore } from '@/fellow/session';
 import { evidenceFromBrewHistory } from '@/recipes/proposal';
+import { AidenCreateProfileSchema, recipeOf } from '@/schemas';
 import { addFeedback, findRestorableBrew, logBrew } from '@/storage/brewLog';
 import { restoreProfile, settingsFromDeviceProfile, snapshotProfile } from '@/storage/profileArchive';
+import { legacyEntry, writeRawBrewLog } from './helpers/brewLog';
 import { freshDataDir, respondWith, withFetch } from './helpers/offline';
 
 const jsonResponse = (body: unknown) =>
@@ -36,6 +38,7 @@ const DEVICE_PROFILE = {
 };
 
 const { id: _id, folder: _folder, ...SETTINGS } = DEVICE_PROFILE;
+const { title: _title, ...RECIPE } = SETTINGS;
 
 async function loggedInClient(): Promise<FellowClient> {
   freshDataDir();
@@ -96,28 +99,10 @@ describe('archiving settings on logBrew', () => {
     ).toBe(30);
   });
 
-  test('old entries without settings still load and validate', async () => {
-    freshDataDir();
-    const entry = await logBrew({
-      coffee: coffee('Legacy'),
-      profile: { title: 'Legacy', ratio: 16, bloomTemp: 95, bloomDuration: 45 }
-    });
-    expect(entry.profile.settings).toBeUndefined();
-  });
-
-  test('archived settings are validated like a profile write', async () => {
+  test('a logged recipe is validated like a profile write', async () => {
     freshDataDir();
     await expect(
-      logBrew({
-        coffee: coffee('Bad'),
-        profile: {
-          title: 'Bad',
-          ratio: 17,
-          bloomTemp: 98,
-          bloomDuration: 45,
-          settings: { ...SETTINGS, bloomTemperature: 140 }
-        }
-      })
+      logBrew({ coffee: coffee('Bad'), profile: { title: 'Bad', recipe: { ...RECIPE, bloomTemperature: 140 } } })
     ).rejects.toThrow();
   });
 });
@@ -127,7 +112,7 @@ describe('restoring from history', () => {
     const settings = { ...SETTINGS, ...overrides };
     const entry = await logBrew({
       coffee: coffee('Elevator - Arsosala'),
-      profile: { id: 'p9', title: settings.title, ratio: 17, bloomTemp: 98, bloomDuration: 45, settings }
+      profile: { title: settings.title, recipe: recipeOf(AidenCreateProfileSchema.parse(settings)) }
     });
     if (rating) await addFeedback(entry.id, { rating });
     return entry;
@@ -172,13 +157,9 @@ describe('restoring from history', () => {
     expect(device.posted).toEqual([]);
   });
 
-  test('a brew logged without settings cannot be restored', async () => {
-    freshDataDir();
-    const legacy = await logBrew({
-      coffee: coffee('Legacy'),
-      profile: { title: 'Legacy', ratio: 16, bloomTemp: 95, bloomDuration: 45 }
-    });
-    await expect(findRestorableBrew({ brewId: legacy.id })).rejects.toThrow(/before full profile settings/);
+  test('a partial brew cannot be restored', async () => {
+    writeRawBrewLog(freshDataDir(), [legacyEntry('brew-legacy', 'Legacy')]);
+    await expect(findRestorableBrew({ brewId: 'brew-legacy' })).rejects.toThrow(/before full recipes/);
     expect(await findRestorableBrew({ query: 'Legacy' })).toBeNull();
   });
 });
@@ -188,11 +169,10 @@ describe('archived settings as evidence', () => {
     freshDataDir();
     const entry = await logBrew({
       coffee: coffee('Elevator - Arsosala'),
-      profile: { title: SETTINGS.title, ratio: 17, bloomTemp: 98, bloomDuration: 45, settings: SETTINGS }
+      profile: { title: SETTINGS.title, recipe: RECIPE }
     });
     const rated = await addFeedback(entry.id, { rating: 5 });
     if (!rated) throw new Error('feedback not saved');
-    const { title: _title, ...parameters } = SETTINGS;
-    expect(evidenceFromBrewHistory(rated).sourceParameters).toEqual(parameters);
+    expect(evidenceFromBrewHistory(rated).sourceParameters).toEqual(RECIPE);
   });
 });

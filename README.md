@@ -346,7 +346,8 @@ Run `bun test` and `bun run typecheck` to confirm a clean checkout before report
 | `sheet.search` | Search recipes by origin/roast/processing (bundled dataset, plus the opt-in sheet) |
 | `sheet.list` | List every known recipe from both sources |
 | `sheet.sync` | Refresh the cached community sheet — a no-op unless an operator opted in |
-| `storage.logBrew` | Log a brew attempt; with `deviceId` + `profileTitle` it archives the full profile settings |
+| `storage.logBrew` | Log a brew with its whole recipe (bloom + pulse steps), given or read from the device by `profileTitle` |
+| `storage.completeRecipe` | Fill in the whole recipe for an older entry marked `partial` |
 | `storage.restoreProfile` | Recreate a deleted profile on the brewer from archived brew history |
 | `storage.addFeedback` | Add taste feedback to a logged brew (rating, notes) |
 | `storage.getHistory` | Get recent brew history with feedback |

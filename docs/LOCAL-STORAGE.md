@@ -9,15 +9,22 @@ as validation.
   bidi/invisible characters, and collapsed before storage/output. Ordinary fields are capped at 200
   characters; titles at 120; notes at 1,000.
 - Ratios, bloom temperatures, bloom durations, and device IDs reuse the canonical Fellow schemas.
-- Each brew entry may archive the profile's full writable settings (`profile.settings`), validated
-  with the same `AidenCreateProfileSchema` a profile write uses. `storage.logBrew` reads them from
-  the device when given `deviceId`, finding the profile by its title. Profiles are named by title
-  everywhere, never by device id: Fellow ids are slots reused after a delete. New entries do not
-  record the id; older entries that did keep it on disk as a legacy field that tools neither show
-  nor look up by. Profiles the device reported anomalies for are not archived, and two Custom
-  profiles sharing a title are refused as ambiguous. `storage.restoreProfile` writes archived
-  settings back, reusing a Custom profile with the same title instead of duplicating it. Entries
-  logged before archiving cannot be restored.
+- Each brew entry stores the whole recipe brewed (`profile.recipe`, the canonical `RecipeSchema` in
+  `src/schemas.ts`): bloom enabled/ratio/duration/temperature and the single-serve and batch pulse
+  steps with their count, interval and per-pulse temperatures, validated like a profile write.
+  The same shape is returned by `sheet.search`/`sheet.list` (`recipe`) and used by proposals.
+  `storage.logBrew` takes the recipe or reads it from the device profile with the given title;
+  it refuses to log without one. Profiles are named by title everywhere, never by device id:
+  Fellow ids are slots reused after a delete. Two Custom profiles sharing a title are refused as
+  ambiguous, and profiles the device reported anomalies for are not read.
+- Entries logged before full recipes (aiden-recipe-generator-46y.2) still load: one that archived
+  `settings` becomes a full entry; one that kept only ratio and bloom is shown as
+  `{ title, partial: true, recipe: { ratio, bloomTemperature, bloomDuration } }`. Their legacy
+  device slot id is dropped. The file is rewritten in the new shape on the next write, so an older
+  server build reading it afterwards would set it aside as unreadable. `storage.completeRecipe`
+  fills a partial entry in from the device or a given recipe, keeping its time and feedback.
+  `storage.restoreProfile` writes a full entry's recipe back, reusing a Custom profile with the
+  same title instead of duplicating it; partial entries cannot be restored until completed.
   Elevation is limited to -500 through 9,000 metres.
 - Every in-process read-modify-write operation is serialized by file, preventing concurrent updates
   from overwriting one another.

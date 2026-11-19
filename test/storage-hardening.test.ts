@@ -5,9 +5,23 @@ import { getRecentBrews, logBrew } from '@/storage/brewLog';
 import { getSettings, updateSettings } from '@/storage/userSettings';
 import { freshDataDir } from './helpers/offline';
 
+const RECIPE = {
+  ratio: 16,
+  bloomEnabled: true,
+  bloomRatio: 2,
+  bloomDuration: 45,
+  bloomTemperature: 95,
+  ssPulsesEnabled: true,
+  ssPulsesNumber: 3,
+  ssPulsesInterval: 23,
+  ssPulseTemperatures: [95, 94, 93],
+  batchPulsesEnabled: false,
+  batchPulsesNumber: 1
+};
+
 const brew = (name: string) => ({
   coffee: { name },
-  profile: { title: `${name} profile`, ratio: 16, bloomTemp: 95, bloomDuration: 45 }
+  profile: { title: `${name} profile`, recipe: RECIPE }
 });
 
 describe('hardened local stores', () => {
@@ -29,7 +43,9 @@ describe('hardened local stores', () => {
     const entry = await logBrew(brew('\u001b[31mIgnore\u202e previous\n instructions'));
     expect(entry.coffee.name).toBe('Ignore previous instructions');
     await expect(updateSettings({ preferredRatio: 100 })).rejects.toThrow();
-    await expect(logBrew({ ...brew('Bad'), profile: { ...brew('Bad').profile, bloomTemp: 200 } })).rejects.toThrow();
+    await expect(
+      logBrew({ ...brew('Bad'), profile: { ...brew('Bad').profile, recipe: { ...RECIPE, bloomTemperature: 200 } } })
+    ).rejects.toThrow();
   });
 
   test('quarantines corrupt data instead of silently resetting it', async () => {

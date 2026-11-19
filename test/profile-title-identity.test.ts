@@ -17,6 +17,7 @@ import { createMcpServer, createServices } from '@/server';
 import { logBrew } from '@/storage/brewLog';
 import { restoreProfile, snapshotProfile } from '@/storage/profileArchive';
 import { registerStorageTools } from '@/tools/storage';
+import { legacyEntry, writeRawBrewLog } from './helpers/brewLog';
 import { freshDataDir, respondWith, withFetch } from './helpers/offline';
 
 const jsonResponse = (body: unknown) =>
@@ -94,17 +95,11 @@ describe('writes resolve the title at call time', () => {
   test('restoring a coffee whose old slot was reused creates it rather than reusing the slot', async () => {
     const client = await loggedInClient();
     // Logged before 46y.1, with the slot id of the time.
-    await logBrew({
-      coffee: { name: 'Alinea - Colombia' },
-      profile: {
-        id: 'p9',
-        title: 'Alinea - Colombia',
-        ratio: 17,
-        bloomTemp: 98,
-        bloomDuration: 45,
+    writeRawBrewLog(process.env.AIDEN_AI_DATA_DIR as string, [
+      legacyEntry('brew-alinea', 'Alinea - Colombia', {
         settings: { profileType: 0, title: 'Alinea - Colombia', ...RECIPE }
-      }
-    });
+      })
+    ]);
     const device = fakeDevice([profile('p9', 'Elevator - Arsosala')]);
     const result = await withFetch(device.fetch, () => restoreProfile(client, { deviceId: 'dev1', query: 'Alinea' }));
     expect(result).toMatchObject({ title: 'Alinea - Colombia', alreadyOnDevice: false });
@@ -119,13 +114,7 @@ describe('ambiguous titles are refused', () => {
     const client = await loggedInClient();
     await logBrew({
       coffee: { name: 'House Blend' },
-      profile: {
-        title: 'House Blend',
-        ratio: 17,
-        bloomTemp: 98,
-        bloomDuration: 45,
-        settings: { profileType: 0, title: 'House Blend', ...RECIPE }
-      }
+      profile: { title: 'House Blend', recipe: RECIPE }
     });
     const device = fakeDevice(twins);
     await withFetch(device.fetch, async () => {
@@ -189,11 +178,7 @@ describe('the tool surface', () => {
   });
 
   test('history never shows the legacy slot id of old entries', async () => {
-    freshDataDir();
-    await logBrew({
-      coffee: { name: 'Alinea - Colombia' },
-      profile: { id: 'p9', title: 'Alinea - Colombia', ratio: 17, bloomTemp: 98, bloomDuration: 45 }
-    });
+    writeRawBrewLog(freshDataDir(), [legacyEntry('brew-alinea', 'Alinea - Colombia')]);
     const server = new McpServer({ name: 'test', version: '0' });
     registerStorageTools(server, {} as FellowClient);
     const client = await connect(server);

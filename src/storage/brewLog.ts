@@ -9,7 +9,10 @@ import {
   AidenCreateProfileSchema,
   AidenRatioSchema,
   AidenTemperatureSchema,
-  ResourceIdSchema
+  type BrewRecipe,
+  RecipeSchema,
+  ResourceIdSchema,
+  recipeOf
 } from '@/schemas';
 import { atomicWriteStore, readStore, withStoreLock } from '@/storage/jsonStore';
 import { sanitizeText } from '@/text';
@@ -37,40 +40,83 @@ const FeedbackSchema = z.strictObject({
   notes: safeText(1_000).optional()
 });
 
-export const BrewEntrySchema = z.strictObject({
-  id: BrewIdSchema,
-  timestamp: z.number().int().nonnegative(),
-  coffee: z.strictObject({
-    name: safeText(),
-    roaster: safeText().optional(),
-    origin: safeText().optional(),
-    roast: safeText().optional(),
-    processing: safeText().optional()
-  }),
-  profile: z.strictObject({
-    /**
-     * Legacy: the device's slot id for the profile at the time of the brew, recorded only by
-     * entries logged before aiden-recipe-generator-46y.1. Fellow reuses ids once a profile is
-     * deleted (p9 was one coffee, then another), so it is never written, shown, or looked up by;
-     * the title identifies the profile.
-     */
+const CoffeeSchema = z.strictObject({
+  name: safeText(),
+  roaster: safeText().optional(),
+  origin: safeText().optional(),
+  roast: safeText().optional(),
+  processing: safeText().optional()
+});
+
+/**
+ * What an entry logged before full recipes were recorded still knows: ratio and bloom only, with
+ * no bloom ratio and no pulse steps (aiden-recipe-generator-46y.2).
+ */
+const PartialRecipeSchema = z.strictObject({
+  ratio: AidenRatioSchema,
+  bloomTemperature: AidenTemperatureSchema,
+  bloomDuration: AidenBloomDurationSchema
+});
+
+/**
+ * The profile a brew used, named by its title. `recipe` is the whole brew — bloom and every
+ * single-serve and batch pulse step — so the profile can be recreated after it leaves the brewer.
+ * Entries logged before that carry `partial: true` and only the ratio and bloom they recorded.
+ */
+const BrewProfileSchema = z.union([
+  z.strictObject({ title: safeText(120), recipe: RecipeSchema }),
+  z.strictObject({ title: safeText(120), partial: z.literal(true), recipe: PartialRecipeSchema })
+]);
+
+/**
+ * The on-disk shape before aiden-recipe-generator-46y.2: a ratio/bloom summary, an optional
+ * archived settings snapshot, and the device's slot id (which Fellow reuses, so it is dropped).
+ */
+const LegacyBrewProfileSchema = z
+  .strictObject({
     id: ResourceIdSchema.optional(),
     title: safeText(120),
     ratio: AidenRatioSchema,
     bloomTemp: AidenTemperatureSchema,
     bloomDuration: AidenBloomDurationSchema,
-    /**
-     * Every writable setting of the profile as brewed, so it can be recreated after the operator
-     * clears it off the brewer. Absent on entries logged before this was recorded.
-     */
     settings: AidenCreateProfileSchema.optional()
-  }),
+  })
+  .transform(
+    (legacy): z.output<typeof BrewProfileSchema> =>
+      legacy.settings
+        ? { title: legacy.title, recipe: recipeOf(legacy.settings) }
+        : {
+            title: legacy.title,
+            partial: true,
+            recipe: { ratio: legacy.ratio, bloomTemperature: legacy.bloomTemp, bloomDuration: legacy.bloomDuration }
+          }
+  );
+
+export const BrewEntrySchema = z.strictObject({
+  id: BrewIdSchema,
+  timestamp: z.number().int().nonnegative(),
+  coffee: CoffeeSchema,
+  profile: BrewProfileSchema,
   feedback: FeedbackSchema.optional()
 });
 export type BrewEntry = z.infer<typeof BrewEntrySchema>;
+export type FullBrewEntry = BrewEntry & { profile: { recipe: BrewRecipe; partial?: undefined } };
 
-const NewBrewSchema = BrewEntrySchema.omit({ id: true, timestamp: true });
-const BrewLogSchema = z.strictObject({ entries: z.array(BrewEntrySchema).max(MAX_ENTRIES) });
+/** True when the entry records the whole recipe, not a pre-46y.2 summary. */
+export function hasFullRecipe(entry: BrewEntry): entry is FullBrewEntry {
+  return !('partial' in entry.profile);
+}
+
+/** Entries as stored: the current shape, or a legacy one migrated on read. */
+const StoredBrewEntrySchema = BrewEntrySchema.extend({
+  profile: z.union([BrewProfileSchema, LegacyBrewProfileSchema])
+});
+
+const NewBrewSchema = z.strictObject({
+  coffee: CoffeeSchema,
+  profile: z.strictObject({ title: safeText(120), recipe: RecipeSchema })
+});
+const BrewLogSchema = z.strictObject({ entries: z.array(StoredBrewEntrySchema).max(MAX_ENTRIES) });
 type BrewLog = z.infer<typeof BrewLogSchema>;
 
 async function getLogPath(): Promise<string> {
@@ -113,6 +159,30 @@ export async function addFeedback(brewId: string, input: z.input<typeof Feedback
     await atomicWriteStore(path, log);
     return entry;
   });
+}
+
+/**
+ * Give an entry its whole recipe, keeping its coffee, time and feedback. For entries logged before
+ * full recipes were recorded, once the recipe brewed is known again.
+ */
+export async function completeRecipe(brewId: string, recipe: z.input<typeof RecipeSchema>): Promise<BrewEntry | null> {
+  const id = BrewIdSchema.parse(brewId);
+  const full = RecipeSchema.parse(recipe);
+  const path = await getLogPath();
+  return withStoreLock(path, async () => {
+    const log = await readLog(path);
+    const entry = log.entries.find((candidate) => candidate.id === id);
+    if (!entry) return null;
+    entry.profile = { title: entry.profile.title, recipe: full };
+    await atomicWriteStore(path, log);
+    return entry;
+  });
+}
+
+export async function getBrew(brewId: string): Promise<BrewEntry | null> {
+  const id = BrewIdSchema.parse(brewId);
+  const path = await getLogPath();
+  return withStoreLock(path, async () => (await readLog(path)).entries.find((entry) => entry.id === id) ?? null);
 }
 
 export async function getRecentBrews(limit = 20): Promise<BrewEntry[]> {
@@ -168,32 +238,33 @@ const RestoreQuerySchema = z
 
 /**
  * The logged brew to rebuild a profile from: the named entry, or else the best-rated entry
- * matching the query (rated before unrated, then newest). Only entries that recorded full
- * settings qualify, because a profile cannot be rebuilt from ratio and bloom alone.
+ * matching the query (rated before unrated, then newest). Only entries with the full recipe
+ * qualify, because a profile cannot be rebuilt from ratio and bloom alone.
  */
-export async function findRestorableBrew(input: z.input<typeof RestoreQuerySchema>): Promise<BrewEntry | null> {
+export async function findRestorableBrew(input: z.input<typeof RestoreQuerySchema>): Promise<FullBrewEntry | null> {
   const { brewId, query } = RestoreQuerySchema.parse(input);
   const path = await getLogPath();
   const entries = await withStoreLock(path, async () => (await readLog(path)).entries);
   if (brewId) {
     const entry = entries.find((candidate) => candidate.id === brewId);
     if (!entry) return null;
-    if (!entry.profile.settings)
+    if (!hasFullRecipe(entry))
       throw new Error(
-        `Brew ${brewId} was logged before full profile settings were recorded, so it cannot be restored.`
+        `Brew ${brewId} was logged before full recipes were recorded, so it cannot be restored. ` +
+          'Complete it with storage.completeRecipe first.'
       );
     return entry;
   }
   const q = (query ?? '').toLowerCase();
-  const matches = entries.filter(
-    (entry) =>
-      entry.profile.settings &&
+  const matches = entries
+    .filter(hasFullRecipe)
+    .filter((entry) =>
       [entry.coffee.name, entry.coffee.roaster, entry.coffee.origin, entry.profile.title]
         .filter(Boolean)
         .join(' ')
         .toLowerCase()
         .includes(q)
-  );
+    );
   matches.sort((a, b) => (b.feedback?.rating ?? 0) - (a.feedback?.rating ?? 0) || b.timestamp - a.timestamp);
   return matches[0] ?? null;
 }

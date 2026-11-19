@@ -11,7 +11,8 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as z from 'zod/v4';
 import type { Recipe, RecipeDataset, SearchQuery } from '@/recipes/dataset';
-import type { SanitizedSheetProfile } from '@/sheet/sanitize';
+import { RecipeSchema, recipeOf } from '@/schemas';
+import { type SanitizedSheetProfile, toAidenCreateProfile } from '@/sheet/sanitize';
 import type { SheetProfile, SheetProfileStore } from '@/sheet/store';
 import { toolResponse } from '@/tools/response';
 import {
@@ -57,6 +58,13 @@ const SheetProfileSchema = z.object({
  */
 const RecipeRecordSchema = SheetProfileSchema.extend({
   trust: z.enum(TRUST_LABELS),
+  /**
+   * The whole recipe in the same shape the brew log and proposals use: bloom and every
+   * single-serve and batch pulse step with temperatures. Absent, with `partial: true`, when the
+   * source leaves out or garbles a field the brewer needs (see `validation`).
+   */
+  recipe: RecipeSchema.optional(),
+  partial: z.literal(true).optional(),
   id: z.string().optional(),
   source: z
     .object({
@@ -78,13 +86,26 @@ const listOutputSchema = {
   dataTrust: z.enum(TRUST_LABELS)
 };
 
+/** The canonical recipe for a source record, or the partial flag when it cannot be built. */
+function canonicalRecipe(profile: SanitizedSheetProfile): Pick<RecipeRecord, 'recipe' | 'partial'> {
+  const converted = toAidenCreateProfile(profile);
+  return converted.success ? { recipe: recipeOf(converted.profile) } : { partial: true };
+}
+
 function bundledRecord(recipe: Recipe): RecipeRecord {
   const { id, source, notes, ...profile } = recipe;
-  return { ...profile, id, source, ...(notes ? { notes } : {}), trust: BUNDLED_DATASET_TRUST_LABEL };
+  return {
+    ...profile,
+    ...canonicalRecipe(profile),
+    id,
+    source,
+    ...(notes ? { notes } : {}),
+    trust: BUNDLED_DATASET_TRUST_LABEL
+  };
 }
 
 function sheetRecord(profile: SanitizedSheetProfile): RecipeRecord {
-  return { ...profile, trust: UNTRUSTED_SHEET_TRUST_LABEL };
+  return { ...profile, ...canonicalRecipe(profile), trust: UNTRUSTED_SHEET_TRUST_LABEL };
 }
 
 const contains = (value: string | undefined, needle: string) =>
@@ -170,7 +191,8 @@ export function registerSheetTools(server: McpServer, dataset: RecipeDataset, sh
       title: 'Search Recipes',
       description:
         'Filter recipes by origin, roast, processing, or free text across the bundled dataset and ' +
-        'any opted-in community sheet. Returns matching profiles with full brewing parameters. ' +
+        'any opted-in community sheet. Each match carries `recipe`, the whole brew (bloom and ' +
+        'single-serve and batch pulse steps with temperatures), or `partial: true` when the source is incomplete. ' +
         UNTRUSTED_SHEET_TOOL_NOTE,
       inputSchema: {
         query: z.string().optional().describe('Free text search (roaster name, coffee name, varietal)'),

@@ -159,9 +159,19 @@ describe('concurrent MCP sessions over HTTP', () => {
       arguments: {
         coffeeName: `Coffee ${i}`,
         profileTitle: `Profile ${i}`,
-        ratio: 16,
-        bloomTemp: 94,
-        bloomDuration: 30
+        recipe: {
+          ratio: 16,
+          bloomEnabled: true,
+          bloomRatio: 2,
+          bloomDuration: 30,
+          bloomTemperature: 94,
+          ssPulsesEnabled: true,
+          ssPulsesNumber: 3,
+          ssPulsesInterval: 23,
+          ssPulseTemperatures: [94, 93, 92],
+          batchPulsesEnabled: false,
+          batchPulsesNumber: 1
+        }
       }
     });
 

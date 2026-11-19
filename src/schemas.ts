@@ -106,7 +106,48 @@ function checkPulseTemperatureCount(
   }
 }
 
-/** Schema for creating a new brew profile */
+/**
+ * Every brewing parameter of a profile: the whole brew, not just ratio and bloom temperature.
+ * Bloom (enabled, ratio, duration, temperature) and the single-serve and batch pulse steps
+ * (enabled, count, interval, per-pulse temperatures) are all here, so anything carrying a recipe —
+ * the brew log, recipe search results, proposals — can recreate the profile from it
+ * (aiden-recipe-generator-46y.2).
+ */
+const AidenRecipeFields = {
+  overallTemperature: AidenTemperatureSchema.optional().nullable(),
+  ratio: AidenRatioSchema,
+  bloomEnabled: z.boolean(),
+  bloomRatio: AidenBloomRatioSchema,
+  bloomDuration: AidenBloomDurationSchema,
+  bloomTemperature: AidenTemperatureSchema,
+  ssPulsesEnabled: z.boolean(),
+  ssPulsesNumber: AidenPulsesNumberSchema,
+  ssPulsesInterval: AidenPulsesIntervalSchema,
+  ssPulseTemperatures: AidenPulseTemperaturesSchema.default([]),
+  batchPulsesEnabled: z.boolean(),
+  batchPulsesNumber: AidenPulsesNumberSchema,
+  batchPulsesInterval: AidenPulsesIntervalSchema.default(30),
+  batchPulseTemperatures: AidenPulseTemperaturesSchema.default([])
+};
+
+function checkRecipePulses(
+  recipe: {
+    ssPulseTemperatures: number[];
+    ssPulsesNumber: number;
+    batchPulseTemperatures: number[];
+    batchPulsesNumber: number;
+  },
+  ctx: z.RefinementCtx
+) {
+  checkPulseTemperatureCount(ctx, 'ssPulseTemperatures', recipe.ssPulseTemperatures, recipe.ssPulsesNumber);
+  checkPulseTemperatureCount(ctx, 'batchPulseTemperatures', recipe.batchPulseTemperatures, recipe.batchPulsesNumber);
+}
+
+/** The canonical recipe: a profile's brewing parameters without its title or type. */
+export const RecipeSchema = z.strictObject(AidenRecipeFields).superRefine(checkRecipePulses);
+export type BrewRecipe = z.infer<typeof RecipeSchema>;
+
+/** Schema for creating a new brew profile: a title plus the full recipe. */
 export const AidenCreateProfileSchema = z
   .strictObject({
     /**
@@ -117,30 +158,15 @@ export const AidenCreateProfileSchema = z
      */
     profileType: z.literal(0).default(0),
     title: AidenTitleSchema,
-    overallTemperature: AidenTemperatureSchema.optional().nullable(),
-    ratio: AidenRatioSchema,
-    bloomEnabled: z.boolean(),
-    bloomRatio: AidenBloomRatioSchema,
-    bloomDuration: AidenBloomDurationSchema,
-    bloomTemperature: AidenTemperatureSchema,
-    ssPulsesEnabled: z.boolean(),
-    ssPulsesNumber: AidenPulsesNumberSchema,
-    ssPulsesInterval: AidenPulsesIntervalSchema,
-    ssPulseTemperatures: AidenPulseTemperaturesSchema.default([]),
-    batchPulsesEnabled: z.boolean(),
-    batchPulsesNumber: AidenPulsesNumberSchema,
-    batchPulsesInterval: AidenPulsesIntervalSchema.default(30),
-    batchPulseTemperatures: AidenPulseTemperaturesSchema.default([])
+    ...AidenRecipeFields
   })
-  .superRefine((profile, ctx) => {
-    checkPulseTemperatureCount(ctx, 'ssPulseTemperatures', profile.ssPulseTemperatures, profile.ssPulsesNumber);
-    checkPulseTemperatureCount(
-      ctx,
-      'batchPulseTemperatures',
-      profile.batchPulseTemperatures,
-      profile.batchPulsesNumber
-    );
-  });
+  .superRefine(checkRecipePulses);
+
+/** A profile's recipe, without the identity fields a profile write adds. */
+export function recipeOf(profile: AidenCreateProfileInput): BrewRecipe {
+  const { title: _title, profileType: _profileType, ...recipe } = profile;
+  return recipe;
+}
 
 export type AidenCreateProfileInput = z.infer<typeof AidenCreateProfileSchema>;
 

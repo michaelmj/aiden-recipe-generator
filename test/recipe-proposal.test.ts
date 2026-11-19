@@ -48,7 +48,7 @@ const HISTORY = evidenceFromBrewHistory({
   id: 'brew-1',
   timestamp: 1,
   coffee: { name: 'Another coffee', origin: 'Ethiopia', roast: 'Light', processing: 'Washed' },
-  profile: { title: 'Past brew', ratio: 16, bloomTemp: 96, bloomDuration: 45 },
+  profile: { title: 'Past brew', partial: true, recipe: { ratio: 16, bloomTemperature: 96, bloomDuration: 45 } },
   feedback: { rating: 5, notes: 'Sweet and balanced.' }
 });
 
@@ -171,7 +171,7 @@ describe('evidence ranking', () => {
         id: 'unrated',
         timestamp: 1,
         coffee: { name: 'Untasted' },
-        profile: { title: 'Untasted', ratio: 16, bloomTemp: 96, bloomDuration: 45 }
+        profile: { title: 'Untasted', partial: true, recipe: { ratio: 16, bloomTemperature: 96, bloomDuration: 45 } }
       })
     ).toThrow(/feedback/);
   });

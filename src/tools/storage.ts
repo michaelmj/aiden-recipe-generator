@@ -5,25 +5,27 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as z from 'zod/v4';
 import type { FellowClient } from '@/fellow/client';
-import { type AidenCreateProfileInput, AidenCreateProfileSchema, ResourceIdSchema } from '@/schemas';
-import { addFeedback, type BrewEntry, getRecentBrews, getSimilarBrews, logBrew, searchBrews } from '@/storage/brewLog';
+import { RecipeSchema, ResourceIdSchema, recipeOf } from '@/schemas';
+import {
+  addFeedback,
+  type BrewEntry,
+  completeRecipe,
+  getBrew,
+  getRecentBrews,
+  getSimilarBrews,
+  logBrew,
+  searchBrews
+} from '@/storage/brewLog';
 import { restoreProfile, snapshotProfile } from '@/storage/profileArchive';
 import { getSettings, type UserSettings, updateSettings } from '@/storage/userSettings';
 import { toolResponse } from '@/tools/response';
 
-type PublicBrewEntry = Omit<BrewEntry, 'profile'> & { profile: Omit<BrewEntry['profile'], 'id'> };
-
 /**
- * A brew entry as tools show it. Entries logged before aiden-recipe-generator-46y.1 carry the
- * device's profile id, a slot Fellow has likely reused since, so it is left out rather than
- * offered as something to look a profile up by.
+ * A logged brew as tools show it: the profile by title and its whole recipe — bloom and every
+ * single-serve and batch pulse step. Entries logged before full recipes were recorded say
+ * `partial: true` and hold only ratio and bloom.
  */
-function publicEntry(entry: BrewEntry): PublicBrewEntry {
-  const { id: _slot, ...profile } = entry.profile;
-  return { ...entry, profile };
-}
-
-const BrewEntrySchema: z.ZodType<PublicBrewEntry> = z.object({
+const BrewEntrySchema: z.ZodType<BrewEntry> = z.object({
   id: z.string(),
   timestamp: z.number(),
   coffee: z.object({
@@ -33,13 +35,14 @@ const BrewEntrySchema: z.ZodType<PublicBrewEntry> = z.object({
     roast: z.string().optional(),
     processing: z.string().optional()
   }),
-  profile: z.object({
-    title: z.string(),
-    ratio: z.number(),
-    bloomTemp: z.number(),
-    bloomDuration: z.number(),
-    settings: AidenCreateProfileSchema.optional()
-  }),
+  profile: z.union([
+    z.object({ title: z.string(), recipe: RecipeSchema }),
+    z.object({
+      title: z.string(),
+      partial: z.literal(true),
+      recipe: z.object({ ratio: z.number(), bloomTemperature: z.number(), bloomDuration: z.number() })
+    })
+  ]),
   feedback: z
     .object({
       rating: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]),
@@ -57,53 +60,47 @@ const UserSettingsSchema: z.ZodType<UserSettings> = z.object({
   notes: z.string().optional()
 });
 
+const RecipeInputSchema = RecipeSchema.optional().describe(
+  'The whole recipe as brewed (bloom and single-serve and batch pulse steps), when not reading it from the device'
+);
+
 export function registerStorageTools(server: McpServer, fellow: FellowClient) {
+  /** The recipe given, or the one the device holds under this title. */
+  async function resolveRecipe(args: { deviceId?: string; title: string; recipe?: z.input<typeof RecipeSchema> }) {
+    if (args.recipe) return RecipeSchema.parse(args.recipe);
+    if (!args.deviceId) throw new Error('Give the whole recipe, or a deviceId to read it from by profile title.');
+    const settings = await snapshotProfile(fellow, { deviceId: args.deviceId, title: args.title });
+    if (!settings)
+      throw new Error(
+        `No profile titled "${args.title}" is on the device in a readable shape, so its recipe is unknown. ` +
+          'Pass the whole recipe instead.'
+      );
+    return recipeOf(settings);
+  }
+
   server.registerTool(
     'storage.logBrew',
     {
       title: 'Log Brew Attempt',
       description:
-        'Log a brew attempt for future reference. Pass deviceId and the profile title, and the full ' +
-        'settings of the profile with that title are read from the brewer and archived with the ' +
-        'entry, so it can be restored with storage.restoreProfile after it is deleted from the ' +
-        'device. Or pass the settings directly. ratio, bloomTemp and bloomDuration are only needed ' +
-        'when neither is given.',
+        'Log a brew attempt with its whole recipe. Pass deviceId and the profile title, and the recipe ' +
+        '(bloom and every single-serve and batch pulse step) is read from the profile with that title ' +
+        'on the brewer. Or pass the recipe directly. The entry is what storage.restoreProfile ' +
+        'recreates the profile from after it is deleted from the device.',
       inputSchema: {
         coffeeName: z.string().describe('Name of the coffee'),
         roaster: z.string().optional().describe('Roaster name'),
         origin: z.string().optional().describe('Coffee origin (e.g., Ethiopia, Colombia)'),
         roast: z.string().optional().describe('Roast level (light, medium, dark)'),
         processing: z.string().optional().describe('Processing method (washed, natural, honey)'),
-        deviceId: ResourceIdSchema.optional().describe('Device the profile is on, to archive its full settings'),
+        deviceId: ResourceIdSchema.optional().describe('Device the profile is on, to read its recipe'),
         profileTitle: z.string().describe('Exact title of the profile brewed, as aiden.listProfiles shows it'),
-        settings: AidenCreateProfileSchema.optional().describe(
-          'Full profile settings as brewed, when not reading them from the device'
-        ),
-        ratio: z.number().optional().describe('Brew ratio'),
-        bloomTemp: z.number().optional().describe('Bloom temperature in Celsius'),
-        bloomDuration: z.number().optional().describe('Bloom duration in seconds')
+        recipe: RecipeInputSchema
       },
-      outputSchema: { ok: z.boolean(), brewId: z.string(), settingsArchived: z.boolean(), message: z.string() }
+      outputSchema: { ok: z.boolean(), brewId: z.string(), message: z.string() }
     },
     async (args) => {
-      let settings: AidenCreateProfileInput | undefined = args.settings;
-      let warning = '';
-      if (!settings && args.deviceId) {
-        try {
-          settings = await snapshotProfile(fellow, { deviceId: args.deviceId, title: args.profileTitle });
-          if (!settings)
-            warning = ` No profile titled "${args.profileTitle}" was found on the device in a restorable shape, so full settings were not archived.`;
-        } catch (error) {
-          warning = ` Full settings were not archived: ${error instanceof Error ? error.message : 'the device could not be read.'}`;
-        }
-      }
-      const ratio = args.ratio ?? settings?.ratio;
-      const bloomTemp = args.bloomTemp ?? settings?.bloomTemperature;
-      const bloomDuration = args.bloomDuration ?? settings?.bloomDuration;
-      if (ratio === undefined || bloomTemp === undefined || bloomDuration === undefined)
-        throw new Error(
-          'Give ratio, bloomTemp and bloomDuration, or the full settings, or a deviceId to read them from by profile title.'
-        );
+      const recipe = await resolveRecipe({ deviceId: args.deviceId, title: args.profileTitle, recipe: args.recipe });
       const entry = await logBrew({
         coffee: {
           name: args.coffeeName,
@@ -112,14 +109,34 @@ export function registerStorageTools(server: McpServer, fellow: FellowClient) {
           roast: args.roast,
           processing: args.processing
         },
-        profile: { title: args.profileTitle, ratio, bloomTemp, bloomDuration, settings }
+        profile: { title: args.profileTitle, recipe }
       });
-      return toolResponse({
-        ok: true,
-        brewId: entry.id,
-        settingsArchived: Boolean(entry.profile.settings),
-        message: `Brew logged. Ask for feedback after tasting!${warning}`
-      });
+      return toolResponse({ ok: true, brewId: entry.id, message: 'Brew logged. Ask for feedback after tasting!' });
+    }
+  );
+
+  server.registerTool(
+    'storage.completeRecipe',
+    {
+      title: 'Complete a Logged Recipe',
+      description:
+        'Give a brew logged with only ratio and bloom (`partial: true`) its whole recipe, keeping its ' +
+        'coffee, time and feedback. Pass deviceId to read the recipe from the profile with the ' +
+        "entry's title, or pass the recipe directly.",
+      inputSchema: {
+        brewId: z.string().describe('The brew to complete'),
+        deviceId: ResourceIdSchema.optional().describe('Device holding the profile with the entry title'),
+        recipe: RecipeInputSchema
+      },
+      outputSchema: { ok: z.boolean(), error: z.string().optional(), entry: BrewEntrySchema.optional() }
+    },
+    async ({ brewId, deviceId, recipe }) => {
+      const existing = await getBrew(brewId);
+      if (!existing) return toolResponse({ ok: false, error: 'Brew not found' });
+      const full = await resolveRecipe({ deviceId, title: existing.profile.title, recipe });
+      const entry = await completeRecipe(brewId, full);
+      if (!entry) return toolResponse({ ok: false, error: 'Brew not found' });
+      return toolResponse({ ok: true, entry });
     }
   );
 
@@ -128,7 +145,7 @@ export function registerStorageTools(server: McpServer, fellow: FellowClient) {
     {
       title: 'Restore Profile From History',
       description:
-        'Recreate a deleted profile on the brewer from its archived settings in brew history. ' +
+        'Recreate a deleted profile on the brewer from the whole recipe recorded in brew history. ' +
         'Name a brewId, or a query (coffee name, roaster, origin or profile title) to use the ' +
         'best-rated matching brew. Profiles are named by title: a Custom profile with the same title ' +
         'already on the device is reported instead of duplicated. Optionally override the title.',
@@ -152,7 +169,7 @@ export function registerStorageTools(server: McpServer, fellow: FellowClient) {
         return toolResponse({
           ok: false,
           error:
-            'No logged brew with archived settings matches. Brews logged before settings were archived cannot be restored.'
+            'No logged brew with a whole recipe matches. Entries marked partial can be completed with storage.completeRecipe first.'
         });
       return toolResponse({
         ok: true,
@@ -180,7 +197,7 @@ export function registerStorageTools(server: McpServer, fellow: FellowClient) {
       // Zod validates rating is 1-5, cast is safe
       const entry = await addFeedback(brewId, { rating: rating as 1 | 2 | 3 | 4 | 5, taste, notes });
       if (!entry) return toolResponse({ ok: false, error: 'Brew not found' });
-      return toolResponse({ ok: true, entry: publicEntry(entry) });
+      return toolResponse({ ok: true, entry });
     }
   );
 
@@ -188,13 +205,14 @@ export function registerStorageTools(server: McpServer, fellow: FellowClient) {
     'storage.getHistory',
     {
       title: 'Get Brew History',
-      description: 'Get recent brew history with feedback.',
+      description:
+        'Get recent brew history with feedback. Each entry holds the whole recipe brewed; `partial: true` marks older entries that recorded only ratio and bloom.',
       inputSchema: { limit: z.number().int().min(1).max(100).default(20).describe('Max entries to return') },
       outputSchema: { ok: z.boolean(), count: z.number(), entries: z.array(BrewEntrySchema) }
     },
     async ({ limit }) => {
       const entries = await getRecentBrews(limit);
-      return toolResponse({ ok: true, count: entries.length, entries: entries.map(publicEntry) });
+      return toolResponse({ ok: true, count: entries.length, entries });
     }
   );
 
@@ -202,13 +220,14 @@ export function registerStorageTools(server: McpServer, fellow: FellowClient) {
     'storage.search',
     {
       title: 'Search Brew History',
-      description: 'Search brew history by coffee name, roaster, or origin.',
+      description:
+        'Search brew history by coffee name, roaster, origin or profile title. Entries carry their whole recipe.',
       inputSchema: { query: z.string().describe('Search term') },
       outputSchema: { ok: z.boolean(), count: z.number(), entries: z.array(BrewEntrySchema) }
     },
     async ({ query }) => {
       const entries = await searchBrews(query);
-      return toolResponse({ ok: true, count: entries.length, entries: entries.map(publicEntry) });
+      return toolResponse({ ok: true, count: entries.length, entries });
     }
   );
 
@@ -216,7 +235,7 @@ export function registerStorageTools(server: McpServer, fellow: FellowClient) {
     'storage.findSimilar',
     {
       title: 'Find Similar Brews',
-      description: 'Find past brews with similar coffee characteristics.',
+      description: 'Find past brews with similar coffee characteristics, each with its whole recipe.',
       inputSchema: {
         origin: z.string().optional().describe('Coffee origin'),
         roast: z.string().optional().describe('Roast level'),
@@ -226,7 +245,7 @@ export function registerStorageTools(server: McpServer, fellow: FellowClient) {
     },
     async (args) => {
       const entries = await getSimilarBrews(args);
-      return toolResponse({ ok: true, count: entries.length, entries: entries.map(publicEntry) });
+      return toolResponse({ ok: true, count: entries.length, entries });
     }
   );
 

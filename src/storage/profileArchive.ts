@@ -2,13 +2,13 @@
  * Keep brewed profiles recoverable after they leave the brewer (aiden-recipe-generator-3ha).
  *
  * The operator keeps only current coffees on the Aiden and deletes the rest. The brew log is
- * therefore the archive: each entry carries the full settings it was brewed with, and a profile
+ * therefore the archive: each entry carries the full recipe it was brewed with, and a profile
  * can be written back from it when the coffee returns.
  */
 
 import type { FellowClient, Profile } from '@/fellow/client';
 import { type AidenCreateProfileInput, AidenCreateProfileSchema } from '@/schemas';
-import { type BrewEntry, findRestorableBrew } from '@/storage/brewLog';
+import { type FullBrewEntry, findRestorableBrew } from '@/storage/brewLog';
 
 /**
  * Turn a profile read from the device into writable settings, or undefined when the device
@@ -50,7 +50,7 @@ export async function snapshotProfile(
 }
 
 export type RestoreResult = {
-  brew: BrewEntry;
+  brew: FullBrewEntry;
   title: string;
   alreadyOnDevice: boolean;
 };
@@ -64,12 +64,9 @@ export async function restoreProfile(
   args: { deviceId: string; brewId?: string; query?: string; title?: string }
 ): Promise<RestoreResult | null> {
   const brew = await findRestorableBrew({ brewId: args.brewId, query: args.query });
-  if (!brew?.profile.settings) return null;
+  if (!brew) return null;
 
-  const settings = AidenCreateProfileSchema.parse({
-    ...brew.profile.settings,
-    ...(args.title ? { title: args.title } : {})
-  });
+  const settings = AidenCreateProfileSchema.parse({ ...brew.profile.recipe, title: args.title ?? brew.profile.title });
 
   const existing = await fellow.findProfileByTitle({ deviceId: args.deviceId, title: settings.title });
   if (existing?.folder === 'Custom') return { brew, title: settings.title, alreadyOnDevice: true };

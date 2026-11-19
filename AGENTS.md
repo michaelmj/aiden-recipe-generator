@@ -37,8 +37,9 @@ When the user asks to brew coffee or shows a coffee bag photo:
 - `aiden.createProfile` / `aiden.updateProfile` / `aiden.deleteProfile` - Create/modify/delete profiles, named by title (device ids are reused slots; never use them)
 
 **After brewing:**
-- `storage.logBrew` - Log the brew attempt. Always pass `deviceId` and `profileTitle` so the full settings are archived
+- `storage.logBrew` - Log the brew attempt. Always pass `deviceId` and `profileTitle` so the whole recipe (bloom + pulse steps) is recorded
 - `storage.restoreProfile` - Recreate a profile the user deleted from the brewer, from brew history (by `brewId` or `query`)
+- `storage.completeRecipe` - Fill in the whole recipe for an older brew entry marked `partial`
 - `storage.addFeedback` - Save feedback (rating, taste notes)
 - `user.updateSettings` - Save grinder if user mentioned it
 
