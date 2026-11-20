@@ -2,6 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as z from 'zod/v4';
 import type { FellowClient } from '@/fellow/client';
 import { AidenCreateProfileSchema, AidenUpdateProfileSchema, ResourceIdSchema } from '@/schemas';
+import { annotationsFor } from '@/tools/annotations';
 import { toolResponse } from '@/tools/response';
 
 /** Exact title of a profile on the device, as aiden.listProfiles shows it. */
@@ -33,6 +34,7 @@ export function registerProfileTools(server: McpServer, fellow: FellowClient) {
   server.registerTool(
     'aiden.listProfiles',
     {
+      annotations: annotationsFor('aiden.listProfiles'),
       title: 'List Brew Profiles',
       description:
         'List brew profiles for a device. Name a profile by its title in every other tool: ids are ' +
@@ -48,6 +50,7 @@ export function registerProfileTools(server: McpServer, fellow: FellowClient) {
   server.registerTool(
     'aiden.createProfile',
     {
+      annotations: annotationsFor('aiden.createProfile'),
       title: 'Create Brew Profile',
       description:
         'Create a new Custom profile on the device. Profiles are named by title, so a title already ' +
@@ -64,6 +67,7 @@ export function registerProfileTools(server: McpServer, fellow: FellowClient) {
   server.registerTool(
     'aiden.updateProfile',
     {
+      annotations: annotationsFor('aiden.updateProfile'),
       title: 'Update Brew Profile',
       description:
         'Patch the Custom profile with this exact title, changing at least one field. Refused when no ' +
@@ -84,6 +88,7 @@ export function registerProfileTools(server: McpServer, fellow: FellowClient) {
   server.registerTool(
     'aiden.deleteProfile',
     {
+      annotations: annotationsFor('aiden.deleteProfile'),
       title: 'Delete Brew Profile',
       description:
         'Delete the Custom profile with this exact title. Refused when no Custom profile or more than one has the title.',

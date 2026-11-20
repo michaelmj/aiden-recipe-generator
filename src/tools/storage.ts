@@ -18,6 +18,7 @@ import {
 } from '@/storage/brewLog';
 import { restoreProfile, snapshotProfile } from '@/storage/profileArchive';
 import { getSettings, type UserSettings, updateSettings } from '@/storage/userSettings';
+import { annotationsFor } from '@/tools/annotations';
 import { toolResponse } from '@/tools/response';
 
 /**
@@ -81,6 +82,7 @@ export function registerStorageTools(server: McpServer, fellow: FellowClient) {
   server.registerTool(
     'storage.logBrew',
     {
+      annotations: annotationsFor('storage.logBrew'),
       title: 'Log Brew Attempt',
       description:
         'Log a brew attempt with its whole recipe. Pass deviceId and the profile title, and the recipe ' +
@@ -118,6 +120,7 @@ export function registerStorageTools(server: McpServer, fellow: FellowClient) {
   server.registerTool(
     'storage.completeRecipe',
     {
+      annotations: annotationsFor('storage.completeRecipe'),
       title: 'Complete a Logged Recipe',
       description:
         'Give a brew logged with only ratio and bloom (`partial: true`) its whole recipe, keeping its ' +
@@ -143,6 +146,7 @@ export function registerStorageTools(server: McpServer, fellow: FellowClient) {
   server.registerTool(
     'storage.restoreProfile',
     {
+      annotations: annotationsFor('storage.restoreProfile'),
       title: 'Restore Profile From History',
       description:
         'Recreate a deleted profile on the brewer from the whole recipe recorded in brew history. ' +
@@ -183,6 +187,7 @@ export function registerStorageTools(server: McpServer, fellow: FellowClient) {
   server.registerTool(
     'storage.addFeedback',
     {
+      annotations: annotationsFor('storage.addFeedback'),
       title: 'Add Brew Feedback',
       description: 'Add feedback to a logged brew (rating, taste notes).',
       inputSchema: {
@@ -204,6 +209,7 @@ export function registerStorageTools(server: McpServer, fellow: FellowClient) {
   server.registerTool(
     'storage.getHistory',
     {
+      annotations: annotationsFor('storage.getHistory'),
       title: 'Get Brew History',
       description:
         'Get recent brew history with feedback. Each entry holds the whole recipe brewed; `partial: true` marks older entries that recorded only ratio and bloom.',
@@ -219,6 +225,7 @@ export function registerStorageTools(server: McpServer, fellow: FellowClient) {
   server.registerTool(
     'storage.search',
     {
+      annotations: annotationsFor('storage.search'),
       title: 'Search Brew History',
       description:
         'Search brew history by coffee name, roaster, origin or profile title. Entries carry their whole recipe.',
@@ -234,6 +241,7 @@ export function registerStorageTools(server: McpServer, fellow: FellowClient) {
   server.registerTool(
     'storage.findSimilar',
     {
+      annotations: annotationsFor('storage.findSimilar'),
       title: 'Find Similar Brews',
       description: 'Find past brews with similar coffee characteristics, each with its whole recipe.',
       inputSchema: {
@@ -252,6 +260,7 @@ export function registerStorageTools(server: McpServer, fellow: FellowClient) {
   server.registerTool(
     'user.getSettings',
     {
+      annotations: annotationsFor('user.getSettings'),
       title: 'Get User Settings',
       description: 'Get saved user preferences (grinder, default device, etc.).',
       inputSchema: {},
@@ -266,6 +275,7 @@ export function registerStorageTools(server: McpServer, fellow: FellowClient) {
   server.registerTool(
     'user.updateSettings',
     {
+      annotations: annotationsFor('user.updateSettings'),
       title: 'Update User Settings',
       description: 'Save user preferences for future sessions.',
       inputSchema: {

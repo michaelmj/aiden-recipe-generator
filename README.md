@@ -332,6 +332,17 @@ Run `bun test` and `bun run typecheck` to confirm a clean checkout before report
 | `user.getSettings` | Get saved preferences (grinder, default device) |
 | `user.updateSettings` | Save preferences (grinder, device, etc.) |
 
+Every tool publishes MCP safety annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`,
+`openWorldHint`), reviewed in one table in `src/tools/annotations.ts`. In short: the `*.list*`,
+`*.get*`, `*.search`, `storage.findSimilar` and `recipe.validateProposal` tools are read-only;
+`aiden.deleteProfile`, `aiden.updateProfile`, `auth.logout`, `storage.addFeedback`,
+`storage.completeRecipe` and `user.updateSettings` are destructive because they delete or overwrite
+something; and every tool that can reach Fellow's API or the configured community sheet (or return
+rows cached from it) is marked open-world. **Annotations are hints for MCP hosts' approval UX, not a
+security boundary**: the MCP spec tells clients not to trust them, and nothing in this server relies
+on them. Writes are guarded by the HTTP bearer token and Origin check, title-based profile identity,
+and hash-bound, single-use proposal approvals.
+
 `auth.login` is disabled by default because its password argument is visible to the MCP host and may
 enter model transcripts, telemetry, screenshots, or exports. The supported login path is the local
 `bun run auth:login` command above: it requires a TTY, reads the password with echo disabled, passes

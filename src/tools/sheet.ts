@@ -14,6 +14,7 @@ import type { Recipe, RecipeDataset, SearchQuery } from '@/recipes/dataset';
 import { RecipeSchema, recipeOf } from '@/schemas';
 import { type SanitizedSheetProfile, toAidenCreateProfile } from '@/sheet/sanitize';
 import type { SheetProfile, SheetProfileStore } from '@/sheet/store';
+import { annotationsFor } from '@/tools/annotations';
 import { toolResponse } from '@/tools/response';
 import {
   BUNDLED_DATASET_TRUST_LABEL,
@@ -136,6 +137,7 @@ export function registerSheetTools(server: McpServer, dataset: RecipeDataset, sh
   server.registerTool(
     'sheet.sync',
     {
+      annotations: annotationsFor('sheet.sync'),
       title: 'Sync Community Sheet',
       description:
         'Refresh the local cache of community profiles from the configured community sheet. ' +
@@ -169,6 +171,7 @@ export function registerSheetTools(server: McpServer, dataset: RecipeDataset, sh
   server.registerTool(
     'sheet.list',
     {
+      annotations: annotationsFor('sheet.list'),
       title: 'List All Recipes',
       description:
         'Get every known recipe: the bundled dataset that ships with this server, plus the cached ' +
@@ -188,6 +191,7 @@ export function registerSheetTools(server: McpServer, dataset: RecipeDataset, sh
   server.registerTool(
     'sheet.search',
     {
+      annotations: annotationsFor('sheet.search'),
       title: 'Search Recipes',
       description:
         'Filter recipes by origin, roast, processing, or free text across the bundled dataset and ' +

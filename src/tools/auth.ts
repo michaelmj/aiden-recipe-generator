@@ -2,6 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as z from 'zod/v4';
 import type { FellowClient } from '@/fellow/client';
 import { isValidTimezone, resolveLoginTimezone } from '@/fellow/timezone';
+import { annotationsFor } from '@/tools/annotations';
 import { toolResponse } from '@/tools/response';
 
 export const INSECURE_MCP_LOGIN_ENV = 'AIDEN_AI_ENABLE_INSECURE_MCP_LOGIN';
@@ -15,6 +16,7 @@ export function registerAuthTools(server: McpServer, fellow: FellowClient) {
     server.registerTool(
       'auth.login',
       {
+        annotations: annotationsFor('auth.login'),
         title: 'Insecure Fellow Login Compatibility Tool',
         description:
           'INSECURE OPT-IN: sends the Fellow password through the MCP request/transcript. Prefer `bun run auth:login` in a local terminal.',
@@ -40,6 +42,7 @@ export function registerAuthTools(server: McpServer, fellow: FellowClient) {
   server.registerTool(
     'auth.status',
     {
+      annotations: annotationsFor('auth.status'),
       title: 'Auth Status',
       description:
         'Check if the MCP server has a stored Fellow session, and whether it can renew itself without a human.',
@@ -60,6 +63,7 @@ export function registerAuthTools(server: McpServer, fellow: FellowClient) {
   server.registerTool(
     'auth.logout',
     {
+      annotations: annotationsFor('auth.logout'),
       title: 'Logout',
       description: 'Clear stored Fellow session.',
       inputSchema: {},

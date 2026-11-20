@@ -11,12 +11,14 @@ import {
   validateRecipeProposal
 } from '@/recipes/review';
 import { ResourceIdSchema } from '@/schemas';
+import { annotationsFor } from '@/tools/annotations';
 import { toolResponse } from '@/tools/response';
 
 export function registerRecipeTools(server: McpServer, fellow: FellowClient) {
   server.registerTool(
     'recipe.validateProposal',
     {
+      annotations: annotationsFor('recipe.validateProposal'),
       title: 'Validate Recipe Proposal',
       description:
         'Validate a local recipe proposal and compute its immutable content hash. This performs no Fellow call.',
@@ -29,6 +31,7 @@ export function registerRecipeTools(server: McpServer, fellow: FellowClient) {
   server.registerTool(
     'recipe.previewProposal',
     {
+      annotations: annotationsFor('recipe.previewProposal'),
       title: 'Preview Recipe Proposal',
       description:
         'Validate and render the exact device, title, full profile parameters, evidence quality, assumptions, and warnings. ' +
@@ -42,6 +45,7 @@ export function registerRecipeTools(server: McpServer, fellow: FellowClient) {
   server.registerTool(
     'recipe.applyProposal',
     {
+      annotations: annotationsFor('recipe.applyProposal'),
       title: 'Apply Reviewed Recipe Proposal',
       description:
         'Apply one exact proposal only after recipe.previewProposal returned its approvalId. The approval binds device and all profile parameters, expires, and cannot be replayed.',
@@ -59,6 +63,7 @@ export function registerRecipeTools(server: McpServer, fellow: FellowClient) {
   server.registerTool(
     'recipe.cancelProposalReview',
     {
+      annotations: annotationsFor('recipe.cancelProposalReview'),
       title: 'Cancel Recipe Proposal Review',
       description: 'Cancel a pending local recipe review. Cancellation makes no Fellow call.',
       inputSchema: { approvalId: z.string().min(1).max(128) },

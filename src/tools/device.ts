@@ -2,6 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as z from 'zod/v4';
 import type { FellowClient } from '@/fellow/client';
 import { ResourceIdSchema } from '@/schemas';
+import { annotationsFor } from '@/tools/annotations';
 import { toolResponse } from '@/tools/response';
 
 const DeviceSchema = z.object({
@@ -22,6 +23,7 @@ export function registerDeviceTools(server: McpServer, fellow: FellowClient) {
   server.registerTool(
     'aiden.listDevices',
     {
+      annotations: annotationsFor('aiden.listDevices'),
       title: 'List Aiden Devices',
       description: 'List devices from Fellow API.',
       inputSchema: { dataType: z.enum(['real', 'cached']).default('real') },
@@ -33,6 +35,7 @@ export function registerDeviceTools(server: McpServer, fellow: FellowClient) {
   server.registerTool(
     'aiden.getDevice',
     {
+      annotations: annotationsFor('aiden.getDevice'),
       title: 'Get Aiden Device',
       description: 'Get device details from Fellow API.',
       inputSchema: {
