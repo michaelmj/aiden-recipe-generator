@@ -1,7 +1,7 @@
 /**
  * Aiden Recipe Generator MCP Server — Streamable HTTP entry.
  *
- * Serves the same tools as the stdio entry at http://127.0.0.1:<port>/mcp, so the server can be
+ * The only entry point. Serves the MCP tools at http://127.0.0.1:<port>/mcp, so the server can be
  * started once (under `op run`, with the Fellow credentials) and Claude can connect to it without
  * needing any secrets of its own. Port comes from AIDEN_AI_MCP_PORT.
  */

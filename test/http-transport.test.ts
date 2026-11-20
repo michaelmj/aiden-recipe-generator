@@ -1,6 +1,6 @@
 /**
  * Streamable HTTP entry (aiden-recipe-generator-m6i.1): loopback-only listener, independent
- * sessions per client, and the same tool surface as the stdio entry.
+ * sessions per client, and the full tool surface.
  */
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';

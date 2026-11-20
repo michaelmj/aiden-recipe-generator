@@ -126,7 +126,7 @@ signs itself in, and one whose refresh token has died signs in again. Only token
 
 If you would rather the password not sit in the process environment for the server's whole life,
 leave the `op://` reference **unresolved** — export `AIDEN_AI_FELLOW_PASSWORD=op://...` and start with
-`bun run serve:plain` (or put it in a stdio client's `"env"` block) instead of the `op run` wrapper. The server then shells out to `op read` at
+`bun run serve:plain` instead of the `op run` wrapper. The server then shells out to `op read` at
 the moment a re-login needs it, so the secret exists in memory for a few milliseconds instead of for
 days. That path needs `op` on `PATH` and a non-interactive session — an
 [OP_SERVICE_ACCOUNT_TOKEN](https://developer.1password.com/docs/service-accounts/) — because a
@@ -223,49 +223,24 @@ claude mcp add-json -s user aiden \
   '{"type":"http","url":"http://127.0.0.1:47831/mcp","headersHelper":"/absolute/path/to/aiden-recipe-generator/scripts/mcp-headers.sh"}'
 ```
 
-**Claude Desktop, Cursor, or any client that launches stdio servers** — the token rotates on every
-server start, so a static header in a JSON config would go stale. Those clients use the stdio entry
-instead, which they launch themselves. Claude Desktop reads
-`~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) and Cursor reads
-`~/.cursor/mcp.json` or `.cursor/mcp.json` in a project:
-
-```json
-{
-  "mcpServers": {
-    "aiden": {
-      "command": "bun",
-      "args": ["run", "/absolute/path/to/aiden-recipe-generator/src/index.ts"]
-    }
-  }
-}
-```
-
-For 1Password on that path, `op` becomes the command and the server its arguments
-(`"command": "/opt/homebrew/bin/op", "args": ["run", "--env-file=/absolute/path/to/fellow.env", "--",
-"bun", "run", "/absolute/path/to/aiden-recipe-generator/src/index.ts"]`) — which means the client
-itself needs 1Password access on every launch, the cost the HTTP path exists to avoid. Use absolute
-paths to `bun` and `op` (`which bun`, often `/opt/homebrew/bin/bun`) when the client starts with a
-minimal `PATH`. Environment overrides from [Storage and environment](#storage-and-environment) go in
-an `"env": { ... }` object. Claude Desktop could reach the HTTP server through a bridge such as
-`mcp-remote`, but that is untested here.
+**Other MCP clients** — any client that speaks Streamable HTTP and can send an `Authorization`
+header can connect to `http://127.0.0.1:47831/mcp`. The token rotates on every server start, so
+the client must read it from `~/.aiden-ai-profile-generator/http-token` at connect time (as
+`scripts/mcp-headers.sh` does) rather than keep it in a static config. There is no stdio entry.
 
 ### 6. Verify it works
 
 Ask your client something that needs the server, for example *"list my Aiden devices"*, and it
-should call `aiden.listDevices` and name your brewer. To check the stdio entry without a client,
-speak MCP to it directly:
+should call `aiden.listDevices` and name your brewer. Without a client, with the server running:
 
 ```bash
-printf '%s\n' \
-  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"probe","version":"0"}}}' \
-  '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
-  '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"auth.status","arguments":{}}}' \
-  | bun run src/index.ts
+curl -s http://127.0.0.1:47831/mcp \
+  -H "$(scripts/mcp-headers.sh | sed -E 's/^\{"Authorization":"(.*)"\}$/Authorization: \1/')" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"probe","version":"0"}}}'
 ```
 
-It prints `aiden-ai-profile-generator running (stdio)` plus the bundled recipe count on stderr, and
-a JSON response with `"loggedIn": true` once step 3 succeeded. The process stays attached to stdio —
-press Ctrl-C to exit.
+A response naming `aiden-ai-profile-generator` means the server is up and the token works.
 
 ### 7. First brew
 
@@ -312,8 +287,7 @@ tokens end up readable in a file.
 | `Port 47831 on 127.0.0.1 is already in use` | Another aiden server is running (`lsof -iTCP:47831 -sTCP:LISTEN`). Stop it, or set `AIDEN_AI_MCP_PORT` for both the server and Claude Code |
 | `serve: 1Password could not resolve the references` | `op` is signed out, or this terminal cannot reach the 1Password app. Check `op vault list` and *Integrate with 1Password CLI* in 1Password's Developer settings; if this terminal is blocked from the 1Password app (on macOS, `ls ~/Library/Group\ Containers/2BUA8C4S2C.com.1password` says `Operation not permitted`), sign `op` in manually in that shell first — `eval $(op signin --account <account>)`, then your account password — or run `bun run serve` from another terminal (e.g. Terminal.app) |
 | `serve: 1Password CLI (op) not found` | Install the 1Password CLI, set `OP_BIN`, or use `bun run serve:plain` |
-| `Conflicting scopes` warning for `aiden` | An old stdio registration shadows `.mcp.json`; `claude mcp remove aiden -s local` (and `-s user`) |
-| A stdio client shows the server as failed or disconnected | `bun` not on the client's `PATH`, or a relative path in the config — use absolute paths for both |
+| `Conflicting scopes` warning for `aiden` | An old registration shadows `.mcp.json`; `claude mcp remove aiden -s local` (and `-s user`) |
 | `auth.status` reports `loggedIn: false` | `bun run auth:login` has not run, or it ran with a different `AIDEN_AI_DATA_DIR` than the server sees |
 | `A local interactive TTY is required` | `auth:login` was piped or run inside an agent session; run it in a real terminal |
 | `Fellow rejected the credentials supplied through AIDEN_AI_FELLOW_PASSWORD` | Wrong secret in the vault, or the wrong `AIDEN_AI_FELLOW_EMAIL`. They are tried once per process, so restart the server after fixing them |

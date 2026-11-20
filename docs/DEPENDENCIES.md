@@ -22,8 +22,9 @@ Attribution is reproducible: `node scripts/dep-attribution.mjs /tmp/attrib.json`
 **The tree is really two dependencies.** `@modelcontextprotocol/sdk` brings a full HTTP server stack
 (`express`, `hono`, `@hono/node-server`, `cors`, `express-rate-limit`, `body-parser`, `qs`,
 `path-to-regexp`, `router`, `send`, `serve-static`, …) for its SSE and Streamable-HTTP transports.
-`src/index.ts` uses `StdioServerTransport` only, so none of that code is reached — but it is
-installed, it is what the advisories below live in, and it is on disk for anything else to load.
+The server's only entry (`src/httpServer.ts`) uses `StreamableHTTPServerTransport` on top of
+`node:http`, not the SDK's express/hono adapters. Most of that stack is therefore still unreached — but it is installed, it is
+what the advisories below live in, and it is on disk for anything else to load.
 
 `keytar` accounted for 37 of those packages, all of them install-time machinery. It has since been
 removed — see *keytar: removed* below. The tree is now 107 packages from 3 direct dependencies.
@@ -51,7 +52,7 @@ cheap insurance and 5.x will not receive the fix.
 `hono@4.11.7` (~30 advisories), `@hono/node-server@1.19.9` (1 high, 2 moderate), `qs@6.14.1`,
 `path-to-regexp@8.3.0` (1 high), `ajv@8.17.1`, `body-parser@2.2.2`, and `fast-uri@3.1.0` (several
 high host-confusion/SSRF issues). All arrive through `@modelcontextprotocol/sdk` and all of them are
-HTTP-serving or URI-parsing code that a stdio-only server never invokes. They are not an active
+HTTP-serving or URI-parsing code that this server, built on `node:http`, never invokes. They are not an active
 exposure, but they are why the SDK upgrade matters: 1.30.0 pulls newer pins across this stack.
 
 ## Install-time behaviour

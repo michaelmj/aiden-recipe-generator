@@ -1,8 +1,7 @@
 # Threat Model — Aiden Recipe Generator MCP Server
 
-Scope: the MCP server in `src/`, over both transports — the loopback Streamable HTTP entry
-(`src/http.ts`, the default since epic `aiden-recipe-generator-m6i`) and the stdio entry
-(`src/index.ts`). Tracked by epic `aiden-recipe-generator-nh5`; the HTTP surface by `m6i`.
+Scope: the MCP server in `src/`, served only over loopback Streamable HTTP (`src/http.ts`, since
+epic `aiden-recipe-generator-m6i`; the stdio entry was removed). Tracked by epic `aiden-recipe-generator-nh5`; the HTTP surface by `m6i`.
 
 ## Trust boundary in one sentence
 
@@ -76,7 +75,7 @@ The default launch is a long-lived process started by the operator (`bun run ser
 `src/http.ts` in `op run`) that MCP clients connect to at `http://127.0.0.1:<port>/mcp`. That
 splits secret handling from the client: 1Password is consulted once, in a terminal the operator
 chose, and the MCP host never holds or launches anything with Fellow credentials. The price is a
-listening socket, which stdio never had. Anything on the machine can open a TCP connection to it,
+listening socket, which the removed stdio entry never had. Anything on the machine can open a TCP connection to it,
 and so can a web page, by rebinding its own hostname to 127.0.0.1.
 
 Controls, all in `src/httpServer.ts` and `src/httpAuth.ts`, applied to every request on every
@@ -94,8 +93,8 @@ path before any MCP handling:
 
 What it does not cover: a process running as the same user can read the token file, exactly as
 it can read the session file and the keychain-backed key — that is the hostile local operator
-non-goal below, not a new hole. Locks are per process, so running the stdio and HTTP entries at
-the same time against one data dir can still race a token refresh; run one or the other. Sessions
+non-goal below, not a new hole. Locks are per process, so two servers started against one data dir can still race a token
+refresh; the port bind makes a second server on the same port fail, so run one. Sessions
 are not yet reaped when a client vanishes without `DELETE` (`m6i.8`), which costs memory, not
 access.
 
@@ -191,7 +190,7 @@ documenting what another would mean. Both were previously bounded by guesses (`p
 | Fellow API path | `new URL(FELLOW_API_BASE + path)` (`src/fellow/client.ts:217`) | `deviceId` / `profileId` interpolated raw; `..`, `?`, `#` reshape the authenticated request |
 | stderr / error strings | `text.slice(0, 500)` and `slice(0, 1000)` (`src/fellow/client.ts:118,241`) | Upstream body returned into agent context |
 | Local HTTP listener | `127.0.0.1:<port>/mcp` (`src/httpServer.ts`) | Every tool, reachable by any local process or rebinding page that gets past Host/Origin and the bearer token |
-| Process availability | `await ensureCached()` before `server.connect()` (`src/index.ts:35`) | A stalling sheet host prevents the server from starting |
+| Process availability | `warmUp()` after `server.connect()` (`src/server.ts`) | Mitigated: the sheet warm-up is never awaited, so a stalling sheet host can no longer block startup |
 
 ## The two attacks worth defending
 

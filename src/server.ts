@@ -1,8 +1,8 @@
 /**
- * Server assembly shared by every transport.
+ * Server assembly for the loopback HTTP entry (src/http.ts).
  *
- * The stdio entry (src/index.ts) and the HTTP entry (src/http.ts) both build their MCP servers
- * here, so the two cannot drift in which tools or prompts they expose. Long-lived state — the
+ * Every session's MCP server is built here, so sessions cannot drift in which tools or prompts
+ * they expose. Long-lived state — the
  * Fellow session, the bundled dataset and the community-sheet cache — lives in one `Services`
  * object per process. The HTTP entry creates one McpServer per session, and all of them share
  * that object, so a second session neither logs in again nor reloads the recipes.

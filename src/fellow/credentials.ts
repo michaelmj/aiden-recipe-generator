@@ -10,7 +10,7 @@
  *
  * Two shapes, both through AIDEN_AI_FELLOW_PASSWORD:
  *
- *   - **Injected value** — `op run --env-file=.env -- bun run src/index.ts`, with the env file
+ *   - **Injected value** — `op run --env-file=fellow.env -- bun src/http.ts` (what `bun run serve` does), with the env file
  *     holding `AIDEN_AI_FELLOW_PASSWORD=op://Vault/Fellow/password`. The 1Password CLI resolves the
  *     reference before we start and sets the variable for this process only. Nothing here has to
  *     know 1Password exists.

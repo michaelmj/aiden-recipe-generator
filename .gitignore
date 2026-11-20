@@ -19,3 +19,12 @@ data/community-snapshot.json
 *.db
 .beads-credential-key
 .beads/proxieddb/
+
+# personal op:// reference file for `bun run serve`; copy from fellow.env.example
+fellow.env
+
+# operator's local exports (brewer profile dumps); not app data
+resources/
+
+# bd gate lock
+.beads.gate.lock
